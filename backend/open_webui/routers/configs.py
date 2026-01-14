@@ -17,6 +17,7 @@ from open_webui.utils.tools import (
     set_tool_servers,
 )
 from open_webui.utils.mcp.client import MCPClient
+from open_webui.utils.shepherd.client import ShepherdClient
 from open_webui.models.oauth_sessions import OAuthSessions
 
 
@@ -308,6 +309,52 @@ async def verify_tool_servers_config(
                 finally:
                     if client:
                         await client.disconnect()
+        elif form_data.type == "shepherd":
+            try:
+                client = ShepherdClient()
+                headers = None
+
+                token = None
+                if form_data.auth_type == "bearer":
+                    token = form_data.key
+                elif form_data.auth_type == "session":
+                    token = request.state.token.credentials
+                elif form_data.auth_type == "system_oauth":
+                    oauth_token = None
+                    try:
+                        if request.cookies.get("oauth_session_id", None):
+                            oauth_token = await request.app.state.oauth_manager.get_oauth_token(
+                                user.id,
+                                request.cookies.get("oauth_session_id", None),
+                            )
+
+                            if oauth_token:
+                                token = oauth_token.get("access_token", "")
+                    except Exception:
+                        pass
+                if token:
+                    headers = {"Authorization": f"Bearer {token}"}
+
+                if form_data.headers and isinstance(form_data.headers, dict):
+                    if headers is None:
+                        headers = {}
+                    headers.update(form_data.headers)
+
+                await client.connect(form_data.url, headers=headers)
+                specs = await client.list_tool_specs()
+                return {
+                    "status": True,
+                    "specs": specs,
+                }
+            except Exception as e:
+                log.debug(f"Failed to create Shepherd client: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to connect to Shepherd server",
+                )
+            finally:
+                if client:
+                    await client.disconnect()
         else:  # openapi
             token = None
             headers = None

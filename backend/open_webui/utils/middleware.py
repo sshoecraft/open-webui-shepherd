@@ -106,6 +106,7 @@ from open_webui.utils.filter import (
 from open_webui.utils.code_interpreter import execute_code_jupyter
 from open_webui.utils.payload import apply_system_prompt_to_body
 from open_webui.utils.mcp.client import MCPClient
+from open_webui.utils.shepherd.client import ShepherdClient
 
 
 from open_webui.config import (
@@ -1645,6 +1646,8 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     mcp_clients = {}
     mcp_tools_dict = {}
+    shepherd_clients = {}
+    shepherd_tools_dict = {}
 
     if tool_ids:
         for tool_id in tool_ids:
@@ -1776,6 +1779,118 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                         )
                     continue
 
+            elif tool_id.startswith("server:shepherd:"):
+                try:
+                    server_id = tool_id[len("server:shepherd:"):]
+
+                    shepherd_server_connection = None
+                    for (
+                        server_connection
+                    ) in request.app.state.config.TOOL_SERVER_CONNECTIONS:
+                        if (
+                            server_connection.get("type", "") == "shepherd"
+                            and server_connection.get("info", {}).get("id") == server_id
+                        ):
+                            shepherd_server_connection = server_connection
+                            break
+
+                    if not shepherd_server_connection:
+                        log.error(f"Shepherd server with id {server_id} not found")
+                        continue
+
+                    # Check access control for Shepherd server
+                    if not has_tool_server_access(user, shepherd_server_connection):
+                        log.warning(
+                            f"Access denied to Shepherd server {server_id} for user {user.id}"
+                        )
+                        continue
+
+                    auth_type = shepherd_server_connection.get("auth_type", "")
+                    headers = {}
+                    if auth_type == "bearer":
+                        headers["Authorization"] = (
+                            f"Bearer {shepherd_server_connection.get('key', '')}"
+                        )
+                    elif auth_type == "none":
+                        # No authentication
+                        pass
+                    elif auth_type == "session":
+                        headers["Authorization"] = (
+                            f"Bearer {request.state.token.credentials}"
+                        )
+                    elif auth_type == "system_oauth":
+                        oauth_token = extra_params.get("__oauth_token__", None)
+                        if oauth_token:
+                            headers["Authorization"] = (
+                                f"Bearer {oauth_token.get('access_token', '')}"
+                            )
+
+                    connection_headers = shepherd_server_connection.get("headers", None)
+                    if connection_headers and isinstance(connection_headers, dict):
+                        for key, value in connection_headers.items():
+                            headers[key] = value
+
+                    shepherd_clients[server_id] = ShepherdClient()
+                    await shepherd_clients[server_id].connect(
+                        url=shepherd_server_connection.get("url", ""),
+                        headers=headers if headers else None,
+                    )
+
+                    function_name_filter_list = shepherd_server_connection.get(
+                        "config", {}
+                    ).get("function_name_filter_list", "")
+
+                    if isinstance(function_name_filter_list, str):
+                        function_name_filter_list = function_name_filter_list.split(",")
+
+                    tool_specs = await shepherd_clients[server_id].list_tool_specs()
+                    for tool_spec in tool_specs:
+
+                        def make_shepherd_tool_function(client, function_name):
+                            async def tool_function(**kwargs):
+                                return await client.call_tool(
+                                    function_name,
+                                    function_args=kwargs,
+                                )
+
+                            return tool_function
+
+                        if function_name_filter_list:
+                            if not is_string_allowed(
+                                tool_spec["name"], function_name_filter_list
+                            ):
+                                # Skip this function
+                                continue
+
+                        tool_function = make_shepherd_tool_function(
+                            shepherd_clients[server_id], tool_spec["name"]
+                        )
+
+                        shepherd_tools_dict[f"{server_id}_{tool_spec['name']}"] = {
+                            "spec": {
+                                **tool_spec,
+                                "name": f"{server_id}_{tool_spec['name']}",
+                            },
+                            "callable": tool_function,
+                            "type": "shepherd",
+                            "client": shepherd_clients[server_id],
+                            "direct": False,
+                        }
+                except Exception as e:
+                    log.debug(e)
+                    if event_emitter:
+                        await event_emitter(
+                            {
+                                "type": "chat:message:error",
+                                "data": {
+                                    "error": {
+                                        "content": f"Failed to connect to Shepherd server '{server_id}'"
+                                    }
+                                },
+                            }
+                        )
+                    continue
+
         tools_dict = await get_tools(
             request,
             tool_ids,
@@ -1791,6 +1906,9 @@ async def process_chat_payload(request, form_data, user, metadata, model):
         if mcp_tools_dict:
             tools_dict = {**tools_dict, **mcp_tools_dict}
 
+        if shepherd_tools_dict:
+            tools_dict = {**tools_dict, **shepherd_tools_dict}
+
     if direct_tool_servers:
         for tool_server in direct_tool_servers:
             tool_specs = tool_server.pop("specs", [])
@@ -1804,6 +1922,9 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     if mcp_clients:
         metadata["mcp_clients"] = mcp_clients
+
+    if shepherd_clients:
+        metadata["shepherd_clients"] = shepherd_clients
 
     # Inject builtin tools for native function calling based on enabled features and model capability
     # Check if builtin_tools capability is enabled for this model (defaults to True if not specified)
