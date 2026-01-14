@@ -52,6 +52,13 @@ from open_webui.utils.misc import (
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_access
 from open_webui.utils.headers import include_user_info_headers
+from open_webui.utils.context import (
+    is_context_overflow_error,
+    parse_overflow_error,
+    evict_messages,
+    evict_messages_fallback,
+    MAX_CONTEXT_RETRIES,
+)
 
 
 log = logging.getLogger(__name__)
@@ -927,62 +934,123 @@ async def generate_chat_completion(
     else:
         request_url = f"{url}/chat/completions"
 
-    payload = json.dumps(payload)
+    # Retry loop for context overflow handling
+    # Keep payload as dict for potential message eviction
+    original_messages = payload.get("messages", []).copy()
+    last_error_response = None
+    last_status = 500
 
-    r = None
-    session = None
-    streaming = False
-    response = None
+    for attempt in range(MAX_CONTEXT_RETRIES):
+        payload_json = json.dumps(payload)
 
-    try:
-        session = aiohttp.ClientSession(
-            trust_env=True, timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
-        )
+        r = None
+        session = None
+        streaming = False
+        response = None
 
-        r = await session.request(
-            method="POST",
-            url=request_url,
-            data=payload,
-            headers=headers,
-            cookies=cookies,
-            ssl=AIOHTTP_CLIENT_SESSION_SSL,
-        )
-
-        # Check if response is SSE
-        if "text/event-stream" in r.headers.get("Content-Type", ""):
-            streaming = True
-            return StreamingResponse(
-                stream_chunks_handler(r.content),
-                status_code=r.status,
-                headers=dict(r.headers),
-                background=BackgroundTask(
-                    cleanup_response, response=r, session=session
-                ),
+        try:
+            session = aiohttp.ClientSession(
+                trust_env=True, timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
             )
-        else:
-            try:
-                response = await r.json()
-            except Exception as e:
-                log.error(e)
-                response = await r.text()
 
-            if r.status >= 400:
-                if isinstance(response, (dict, list)):
-                    return JSONResponse(status_code=r.status, content=response)
-                else:
-                    return PlainTextResponse(status_code=r.status, content=response)
+            r = await session.request(
+                method="POST",
+                url=request_url,
+                data=payload_json,
+                headers=headers,
+                cookies=cookies,
+                ssl=AIOHTTP_CLIENT_SESSION_SSL,
+            )
 
-            return response
-    except Exception as e:
-        log.exception(e)
+            # Check if response is SSE
+            if "text/event-stream" in r.headers.get("Content-Type", ""):
+                streaming = True
+                # For streaming, we can't easily retry after starting
+                # Return the stream as-is (context errors will appear in stream)
+                return StreamingResponse(
+                    stream_chunks_handler(r.content),
+                    status_code=r.status,
+                    headers=dict(r.headers),
+                    background=BackgroundTask(
+                        cleanup_response, response=r, session=session
+                    ),
+                )
+            else:
+                try:
+                    response = await r.json()
+                except Exception as e:
+                    log.error(e)
+                    response = await r.text()
 
-        raise HTTPException(
-            status_code=r.status if r else 500,
-            detail="Open WebUI: Server Connection Error",
+                last_status = r.status
+                last_error_response = response
+
+                if r.status >= 400:
+                    # Check if this is a context overflow error
+                    if r.status == 400 and is_context_overflow_error(response):
+                        # Try to parse how many tokens to evict
+                        error_msg = ""
+                        if isinstance(response, dict):
+                            error_obj = response.get("error", {})
+                            if isinstance(error_obj, dict):
+                                error_msg = error_obj.get("message", "")
+                            else:
+                                error_msg = str(error_obj)
+                        else:
+                            error_msg = str(response)
+
+                        tokens_needed = parse_overflow_error(error_msg)
+
+                        if tokens_needed > 0:
+                            log.info(
+                                f"Context overflow detected: need to free {tokens_needed} tokens "
+                                f"(attempt {attempt + 1}/{MAX_CONTEXT_RETRIES})"
+                            )
+                            payload["messages"] = evict_messages(
+                                payload["messages"], tokens_needed
+                            )
+                        else:
+                            # Can't parse, use fallback percentage
+                            log.info(
+                                f"Context overflow detected, using fallback eviction "
+                                f"(attempt {attempt + 1}/{MAX_CONTEXT_RETRIES})"
+                            )
+                            payload["messages"] = evict_messages_fallback(
+                                payload["messages"], 0.25
+                            )
+
+                        # Check if we actually evicted anything
+                        if len(payload["messages"]) < len(original_messages):
+                            await cleanup_response(r, session)
+                            continue  # Retry with reduced messages
+                        else:
+                            log.warning("No messages could be evicted, returning error")
+
+                    # Non-context error or can't retry
+                    if isinstance(response, (dict, list)):
+                        return JSONResponse(status_code=r.status, content=response)
+                    else:
+                        return PlainTextResponse(status_code=r.status, content=response)
+
+                return response
+        except Exception as e:
+            log.exception(e)
+            raise HTTPException(
+                status_code=r.status if r else 500,
+                detail="Open WebUI: Server Connection Error",
+            )
+        finally:
+            if not streaming:
+                await cleanup_response(r, session)
+
+    # If we get here, all retries failed
+    log.error(f"All {MAX_CONTEXT_RETRIES} context overflow retries exhausted")
+    if isinstance(last_error_response, (dict, list)):
+        return JSONResponse(status_code=last_status, content=last_error_response)
+    else:
+        return PlainTextResponse(
+            status_code=last_status, content=str(last_error_response)
         )
-    finally:
-        if not streaming:
-            await cleanup_response(r, session)
 
 
 async def embeddings(request: Request, form_data: dict, user):

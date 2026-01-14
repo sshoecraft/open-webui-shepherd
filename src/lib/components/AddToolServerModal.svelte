@@ -35,7 +35,7 @@
 
 	let inputElement = null;
 
-	let type = 'openapi'; // 'openapi', 'mcp'
+	let type = 'openapi'; // 'openapi', 'mcp', 'shepherd'
 
 	let url = '';
 
@@ -443,7 +443,7 @@
 									<div class="">
 										<button
 											on:click={() => {
-												type = ['', 'openapi'].includes(type) ? 'mcp' : 'openapi';
+												if (['', 'openapi'].includes(type)) { type = 'mcp'; } else if (type === 'mcp') { type = 'shepherd'; } else { type = 'openapi'; }
 											}}
 											type="button"
 											class=" text-xs text-gray-700 dark:text-gray-300"
@@ -453,6 +453,9 @@
 											{:else if type === 'mcp'}
 												{$i18n.t('MCP')}
 												<span class="text-gray-500">{$i18n.t('Streamable HTTP')}</span>
+											{:else if type === 'shepherd'}
+												{$i18n.t('Shepherd')}
+												<span class="text-gray-500">{$i18n.t('Tool Server')}</span>
 											{/if}
 										</button>
 									</div>
@@ -735,7 +738,7 @@
 										class={`mb-0.5 text-xs ${($settings?.highContrastMode ?? false) ? 'text-gray-800 dark:text-gray-100' : 'text-gray-500'}`}
 										>{$i18n.t('ID')}
 
-										{#if type !== 'mcp'}
+										{#if type !== 'mcp' && type !== 'shepherd'}
 											<span class="text-xs text-gray-200 dark:text-gray-800 ml-0.5"
 												>{$i18n.t('Optional')}</span
 											>
@@ -750,7 +753,7 @@
 											bind:value={id}
 											placeholder={$i18n.t('Enter ID')}
 											autocomplete="off"
-											required={type === 'mcp'}
+											required={type === 'mcp' || type === 'shepherd'}
 										/>
 									</div>
 								</div>
