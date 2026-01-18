@@ -5,9 +5,10 @@
 	const i18n = getContext('i18n');
 	const dispatch = createEventDispatcher();
 
-	import { models } from '$lib/stores';
+	import { models, config as globalConfig } from '$lib/stores';
 	import { deleteAllModels } from '$lib/apis/models';
 	import { getModelsConfig, setModelsConfig } from '$lib/apis/configs';
+	import { getBackendConfig } from '$lib/apis';
 
 	import Modal from '$lib/components/common/Modal.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
@@ -21,6 +22,7 @@
 	import XMark from '$lib/components/icons/XMark.svelte';
 	import ModelSelector from './ModelSelector.svelte';
 	import Model from '../Evaluations/Model.svelte';
+	import Switch from '$lib/components/common/Switch.svelte';
 
 	export let show = false;
 	export let initHandler = () => {};
@@ -34,6 +36,8 @@
 	let defaultPinnedModelIds = [];
 
 	let modelIds = [];
+
+	let enableModelSelector = true;
 
 	let sortKey = '';
 	let sortOrder = '';
@@ -59,6 +63,8 @@
 			defaultPinnedModelIds = [];
 		}
 
+		enableModelSelector = config?.ENABLE_MODEL_SELECTOR ?? true;
+
 		const modelOrderList = config.MODEL_ORDER_LIST || [];
 		const allModelIds = $models.map((model) => model.id);
 
@@ -81,11 +87,13 @@
 		const res = await setModelsConfig(localStorage.token, {
 			DEFAULT_MODELS: defaultModelIds.join(','),
 			DEFAULT_PINNED_MODELS: defaultPinnedModelIds.join(','),
-			MODEL_ORDER_LIST: modelIds
+			MODEL_ORDER_LIST: modelIds,
+			ENABLE_MODEL_SELECTOR: enableModelSelector
 		});
 
 		if (res) {
 			toast.success($i18n.t('Models configuration saved successfully'));
+			await globalConfig.set(await getBackendConfig());
 			initHandler();
 			show = false;
 		} else {
@@ -138,6 +146,16 @@
 							submitHandler();
 						}}
 					>
+						<div class="mb-2.5 flex w-full items-center justify-between">
+							<div class="self-center text-xs font-medium">
+								{$i18n.t('Allow Model Selection')}
+							</div>
+
+							<Switch bind:state={enableModelSelector} />
+						</div>
+
+						<hr class="border-gray-100 dark:border-gray-700/10 my-2.5 w-full" />
+
 						<div>
 							<div class="flex flex-col w-full">
 								<button

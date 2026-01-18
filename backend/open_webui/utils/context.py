@@ -147,23 +147,136 @@ def parse_overflow_error(error_message: str) -> int:
     return -1
 
 
-def estimate_tokens(message: dict) -> int:
+def compute_chars_per_token_ema(messages: list[dict]) -> float:
     """
-    Rough token estimate for a message.
+    Compute chars_per_token ratio using EMA from message history.
 
-    Uses ~4 chars per token heuristic plus overhead for role/formatting.
+    Replicates Shepherd's EMA approach (backends/openai.cpp lines 1148-1158):
+    - actual_ratio = content.length() / tokens
+    - Only update if deviation is within 0.5x-2x (outlier rejection)
+    - EMA: chars_per_token = 0.8 * chars_per_token + 0.2 * actual_ratio
+    - Clamp between 2.0 and 5.0
 
     Args:
-        message: Message dict with 'role' and 'content'
+        messages: List of message dicts with content and optionally usage
 
     Returns:
-        Estimated token count
+        Computed chars_per_token ratio (default 4.0 if no data)
     """
-    content = message.get("content", "")
-    if isinstance(content, list):
-        # Multi-modal content (images, etc.)
-        content = str(content)
-    return len(content) // 4 + 10  # +10 for role/formatting overhead
+    chars_per_token = 4.0  # Starting estimate
+    alpha = 0.2
+
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+
+        usage = msg.get("usage", {})
+        completion = usage.get("completion_tokens", 0) if usage else 0
+        content = msg.get("content", "")
+
+        if completion > 0 and len(content) > 0:
+            actual_ratio = len(content) / completion
+            deviation_ratio = actual_ratio / chars_per_token
+
+            # Outlier rejection: only update if within 0.5x-2x
+            if 0.5 <= deviation_ratio <= 2.0:
+                chars_per_token = (1.0 - alpha) * chars_per_token + alpha * actual_ratio
+                # Clamp between 2.0 and 5.0
+                chars_per_token = max(2.0, min(5.0, chars_per_token))
+
+    return chars_per_token
+
+
+def estimate_tokens(content: str, chars_per_token: float = 4.0) -> int:
+    """Estimate token count from content length using chars_per_token ratio."""
+    if not content:
+        return 0
+    return int(len(content) / chars_per_token)
+
+
+def compute_message_tokens(messages: list[dict]) -> list[int]:
+    """
+    Compute token counts for all messages using delta calculation.
+
+    Replicates Shepherd's approach (backends/openai.cpp):
+        user_tokens = prompt_tokens[current] - last_prompt_tokens
+        last_prompt_tokens = prompt_tokens + completion_tokens (after assistant response)
+        assistant_tokens = completion_tokens if > 0, else estimate from content
+
+    Args:
+        messages: List of message dicts with 'role', 'content', and optionally 'usage'
+
+    Returns:
+        List of token counts, one per message
+    """
+    n = len(messages)
+    tokens = [0] * n
+
+    # Compute EMA chars_per_token from message history for fallback estimates
+    chars_per_token = compute_chars_per_token_ema(messages)
+
+    # Build list of (index, prompt_tokens, completion_tokens) for assistant msgs with usage
+    assistant_usages = []
+    for i, msg in enumerate(messages):
+        usage = msg.get("usage", {})
+        if msg.get("role") == "assistant":
+            prompt = usage.get("prompt_tokens", 0) if usage else 0
+            completion = usage.get("completion_tokens", 0) if usage else 0
+            assistant_usages.append((i, prompt, completion))
+
+    # Set assistant token counts: completion_tokens if > 0, else estimate from content
+    for idx, prompt, completion in assistant_usages:
+        if completion > 0:
+            tokens[idx] = completion
+        else:
+            content = messages[idx].get("content", "")
+            tokens[idx] = estimate_tokens(content, chars_per_token)
+
+    # Calculate user message tokens from deltas
+    # last_prompt_tokens tracks: prompt_tokens + completion_tokens after each assistant turn
+    last_prompt_tokens = 0
+    asst_idx = 0
+
+    for i, msg in enumerate(messages):
+        role = msg.get("role")
+
+        if role == "user":
+            # Find next assistant after this user message
+            while asst_idx < len(assistant_usages) and assistant_usages[asst_idx][0] < i:
+                asst_idx += 1
+
+            if asst_idx < len(assistant_usages):
+                next_idx, next_prompt, next_completion = assistant_usages[asst_idx]
+                if next_prompt > 0 and last_prompt_tokens > 0:
+                    # Delta calculation: user_tokens = prompt_tokens - last_prompt_tokens
+                    user_tokens = next_prompt - last_prompt_tokens
+                    tokens[i] = max(0, user_tokens)
+                elif next_prompt > 0:
+                    # First user message: includes system prompt
+                    tokens[i] = next_prompt
+                else:
+                    # No prompt_tokens available, estimate from content
+                    content = msg.get("content", "")
+                    tokens[i] = estimate_tokens(content, chars_per_token)
+            else:
+                # No following assistant, estimate from content
+                content = msg.get("content", "")
+                tokens[i] = estimate_tokens(content, chars_per_token)
+
+        elif role == "assistant":
+            usage = msg.get("usage", {})
+            prompt = usage.get("prompt_tokens", 0) if usage else 0
+            completion = usage.get("completion_tokens", 0) if usage else 0
+            if prompt > 0:
+                # Update baseline: last_prompt_tokens = prompt_tokens + completion_tokens
+                last_prompt_tokens = prompt + completion
+
+        elif role == "tool":
+            # Tool messages: estimate from content
+            content = msg.get("content", "")
+            tokens[i] = estimate_tokens(content, chars_per_token)
+
+    return tokens
 
 
 def calculate_turns_to_evict(
@@ -186,6 +299,9 @@ def calculate_turns_to_evict(
     """
     ranges = []
     tokens_freed = 0
+
+    # Precompute token counts using delta calculation
+    token_counts = compute_message_tokens(messages)
 
     # Find last user message (current turn - protected)
     last_user_idx = -1
@@ -218,12 +334,12 @@ def calculate_turns_to_evict(
 
         # Found USER - scan forward for final ASSISTANT
         turn_start = i
-        turn_tokens = estimate_tokens(messages[i])
+        turn_tokens = token_counts[i]
         i += 1
 
         final_assistant_idx = -1
         while i < last_user_idx:
-            turn_tokens += estimate_tokens(messages[i])
+            turn_tokens += token_counts[i]
             role = messages[i].get("role")
 
             if role == "assistant":
@@ -271,7 +387,7 @@ def calculate_turns_to_evict(
                     i += 2
                     continue
 
-                pair_tokens = estimate_tokens(messages[i]) + estimate_tokens(messages[i + 1])
+                pair_tokens = token_counts[i] + token_counts[i + 1]
                 ranges.append((i, i + 1))
                 tokens_freed += pair_tokens
                 log.debug(
@@ -287,7 +403,7 @@ def calculate_turns_to_evict(
     return ranges
 
 
-def evict_messages(messages: list[dict], tokens_needed: int) -> list[dict]:
+def evict_messages(messages: list[dict], tokens_needed: int) -> tuple[list[dict], list[str]]:
     """
     Remove messages from list to free context space.
 
@@ -296,15 +412,23 @@ def evict_messages(messages: list[dict], tokens_needed: int) -> list[dict]:
         tokens_needed: Tokens to free
 
     Returns:
-        New message list with evicted messages removed
+        Tuple of (new message list with evicted messages removed, list of evicted message IDs)
     """
     if tokens_needed <= 0:
-        return messages
+        return messages, []
 
     ranges = calculate_turns_to_evict(messages, tokens_needed)
     if not ranges:
         log.warning("No messages available for eviction")
-        return messages
+        return messages, []
+
+    # Collect evicted message IDs before removing
+    evicted_ids = []
+    for start, end in ranges:
+        for i in range(start, end + 1):
+            msg_id = messages[i].get("id")
+            if msg_id:
+                evicted_ids.append(msg_id)
 
     # Remove ranges in reverse order to preserve indices
     result = messages.copy()
@@ -313,10 +437,10 @@ def evict_messages(messages: list[dict], tokens_needed: int) -> list[dict]:
 
     evicted_count = len(messages) - len(result)
     log.info(f"Evicted {evicted_count} messages to free context space")
-    return result
+    return result, evicted_ids
 
 
-def evict_messages_fallback(messages: list[dict], percentage: float = 0.25) -> list[dict]:
+def evict_messages_fallback(messages: list[dict], percentage: float = 0.25) -> tuple[list[dict], list[str]]:
     """
     Fallback eviction: remove percentage of oldest non-system messages.
 
@@ -327,7 +451,7 @@ def evict_messages_fallback(messages: list[dict], percentage: float = 0.25) -> l
         percentage: Fraction of messages to remove (default 25%)
 
     Returns:
-        New message list with evicted messages removed
+        Tuple of (new message list with evicted messages removed, list of evicted message IDs)
     """
     # Find first non-system message
     start_idx = 0
@@ -345,10 +469,17 @@ def evict_messages_fallback(messages: list[dict], percentage: float = 0.25) -> l
 
     evictable_count = last_user_idx - start_idx
     if evictable_count <= 0:
-        return messages
+        return messages, []
 
     to_remove = max(1, int(evictable_count * percentage))
     end_idx = start_idx + to_remove
 
+    # Collect evicted message IDs
+    evicted_ids = []
+    for i in range(start_idx, end_idx):
+        msg_id = messages[i].get("id")
+        if msg_id:
+            evicted_ids.append(msg_id)
+
     log.info(f"Fallback eviction: removing {to_remove} messages ({percentage*100:.0f}%)")
-    return messages[:start_idx] + messages[end_idx:]
+    return messages[:start_idx] + messages[end_idx:], evicted_ids

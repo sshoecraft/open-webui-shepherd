@@ -383,6 +383,10 @@ from open_webui.config import (
     DEFAULT_PROMPT_SUGGESTIONS,
     DEFAULT_MODELS,
     DEFAULT_PINNED_MODELS,
+    ENABLE_MODEL_SELECTOR,
+    ENABLE_INTEGRATIONS_MENU,
+    ENABLE_CHAT_CONTROLS,
+    ENABLE_TEMPORARY_CHAT,
     DEFAULT_ARENA_MODEL,
     MODEL_ORDER_LIST,
     EVALUATION_ARENA_MODELS,
@@ -430,6 +434,7 @@ from open_webui.config import (
     # Tasks
     TASK_MODEL,
     TASK_MODEL_EXTERNAL,
+    TASK_MODEL_URL,
     ENABLE_TAGS_GENERATION,
     ENABLE_TITLE_GENERATION,
     ENABLE_FOLLOW_UP_GENERATION,
@@ -777,6 +782,10 @@ app.state.config.ADMIN_EMAIL = ADMIN_EMAIL
 
 app.state.config.DEFAULT_MODELS = DEFAULT_MODELS
 app.state.config.DEFAULT_PINNED_MODELS = DEFAULT_PINNED_MODELS
+app.state.config.ENABLE_MODEL_SELECTOR = ENABLE_MODEL_SELECTOR
+app.state.config.ENABLE_INTEGRATIONS_MENU = ENABLE_INTEGRATIONS_MENU
+app.state.config.ENABLE_CHAT_CONTROLS = ENABLE_CHAT_CONTROLS
+app.state.config.ENABLE_TEMPORARY_CHAT = ENABLE_TEMPORARY_CHAT
 app.state.config.MODEL_ORDER_LIST = MODEL_ORDER_LIST
 
 
@@ -1220,6 +1229,7 @@ app.state.speech_speaker_embeddings_dataset = None
 
 app.state.config.TASK_MODEL = TASK_MODEL
 app.state.config.TASK_MODEL_EXTERNAL = TASK_MODEL_EXTERNAL
+app.state.config.TASK_MODEL_URL = TASK_MODEL_URL
 
 
 app.state.config.ENABLE_SEARCH_QUERY_GENERATION = ENABLE_SEARCH_QUERY_GENERATION
@@ -1968,6 +1978,10 @@ async def get_app_config(request: Request):
             {
                 "default_models": app.state.config.DEFAULT_MODELS,
                 "default_pinned_models": app.state.config.DEFAULT_PINNED_MODELS,
+                "enable_model_selector": app.state.config.ENABLE_MODEL_SELECTOR,
+                "enable_integrations_menu": app.state.config.ENABLE_INTEGRATIONS_MENU,
+                "enable_chat_controls": app.state.config.ENABLE_CHAT_CONTROLS,
+                "enable_temporary_chat": app.state.config.ENABLE_TEMPORARY_CHAT,
                 "default_prompt_suggestions": app.state.config.DEFAULT_PROMPT_SUGGESTIONS,
                 "user_count": user_count,
                 "code": {
