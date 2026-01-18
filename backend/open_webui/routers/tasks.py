@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 import re
+import aiohttp
 
 from open_webui.utils.chat import generate_chat_completion
 from open_webui.utils.task import (
@@ -42,6 +43,56 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def generate_task_completion_direct(url: str, payload: dict) -> dict:
+    """
+    Make a direct HTTP request to an OpenAI-compatible endpoint for task completion.
+    Bypasses the model list requirement - used when TASK_MODEL_URL is configured.
+    Uses streaming to collect the response.
+    """
+    import json as json_module
+
+    headers = {"Content-Type": "application/json"}
+    base_url = url.rstrip("/")
+    endpoint = f"{base_url}/chat/completions"
+    payload["stream"] = True
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(endpoint, json=payload, headers=headers) as response:
+                if response.status == 200:
+                    content = ""
+                    async for line in response.content:
+                        line = line.decode("utf-8").strip()
+                        if line.startswith("data: "):
+                            data = line[6:]
+                            if data == "[DONE]":
+                                break
+                            try:
+                                chunk = json_module.loads(data)
+                                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                if "content" in delta:
+                                    content += delta["content"]
+                            except json_module.JSONDecodeError:
+                                continue
+
+                    return {
+                        "choices": [{
+                            "message": {"role": "assistant", "content": content},
+                            "finish_reason": "stop",
+                            "index": 0
+                        }],
+                        "model": payload.get("model", "unknown"),
+                        "object": "chat.completion"
+                    }
+                else:
+                    error_text = await response.text()
+                    log.error(f"Task model request failed: {response.status} - {error_text}")
+                    return None
+    except Exception as e:
+        log.error(f"Task model request exception: {e}")
+        return None
+
+
 ##################################
 #
 # Task Endpoints
@@ -54,6 +105,7 @@ async def get_task_config(request: Request, user=Depends(get_verified_user)):
     return {
         "TASK_MODEL": request.app.state.config.TASK_MODEL,
         "TASK_MODEL_EXTERNAL": request.app.state.config.TASK_MODEL_EXTERNAL,
+        "TASK_MODEL_URL": request.app.state.config.TASK_MODEL_URL,
         "TITLE_GENERATION_PROMPT_TEMPLATE": request.app.state.config.TITLE_GENERATION_PROMPT_TEMPLATE,
         "IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE": request.app.state.config.IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE,
         "ENABLE_AUTOCOMPLETE_GENERATION": request.app.state.config.ENABLE_AUTOCOMPLETE_GENERATION,
@@ -74,6 +126,7 @@ async def get_task_config(request: Request, user=Depends(get_verified_user)):
 class TaskConfigForm(BaseModel):
     TASK_MODEL: Optional[str]
     TASK_MODEL_EXTERNAL: Optional[str]
+    TASK_MODEL_URL: Optional[str]
     ENABLE_TITLE_GENERATION: bool
     TITLE_GENERATION_PROMPT_TEMPLATE: str
     IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE: str
@@ -96,6 +149,7 @@ async def update_task_config(
 ):
     request.app.state.config.TASK_MODEL = form_data.TASK_MODEL
     request.app.state.config.TASK_MODEL_EXTERNAL = form_data.TASK_MODEL_EXTERNAL
+    request.app.state.config.TASK_MODEL_URL = form_data.TASK_MODEL_URL
     request.app.state.config.ENABLE_TITLE_GENERATION = form_data.ENABLE_TITLE_GENERATION
     request.app.state.config.TITLE_GENERATION_PROMPT_TEMPLATE = (
         form_data.TITLE_GENERATION_PROMPT_TEMPLATE
@@ -144,6 +198,7 @@ async def update_task_config(
     return {
         "TASK_MODEL": request.app.state.config.TASK_MODEL,
         "TASK_MODEL_EXTERNAL": request.app.state.config.TASK_MODEL_EXTERNAL,
+        "TASK_MODEL_URL": request.app.state.config.TASK_MODEL_URL,
         "ENABLE_TITLE_GENERATION": request.app.state.config.ENABLE_TITLE_GENERATION,
         "TITLE_GENERATION_PROMPT_TEMPLATE": request.app.state.config.TITLE_GENERATION_PROMPT_TEMPLATE,
         "IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE": request.app.state.config.IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE,
@@ -256,6 +311,31 @@ async def generate_follow_ups(
             content={"detail": "Follow-up generation is disabled"},
         )
 
+    # Check if direct URL is configured (bypasses model list)
+    task_model_url = request.app.state.config.TASK_MODEL_URL
+    if task_model_url:
+        if request.app.state.config.FOLLOW_UP_GENERATION_PROMPT_TEMPLATE != "":
+            template = request.app.state.config.FOLLOW_UP_GENERATION_PROMPT_TEMPLATE
+        else:
+            template = DEFAULT_FOLLOW_UP_GENERATION_PROMPT_TEMPLATE
+
+        content = follow_up_generation_template(template, form_data["messages"], user)
+
+        payload = {
+            "model": "default",
+            "messages": [{"role": "user", "content": content}],
+        }
+
+        result = await generate_task_completion_direct(task_model_url, payload)
+        if result:
+            return result
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Task model request failed",
+            )
+
+    # Normal model routing
     if getattr(request.state, "direct", False) and hasattr(request.state, "model"):
         models = {
             request.state.model["id"]: request.state.model,
@@ -279,9 +359,7 @@ async def generate_follow_ups(
         models,
     )
 
-    log.debug(
-        f"generating chat title using model {task_model_id} for user {user.email} "
-    )
+    log.debug(f"follow-up: using task model {task_model_id}")
 
     if request.app.state.config.FOLLOW_UP_GENERATION_PROMPT_TEMPLATE != "":
         template = request.app.state.config.FOLLOW_UP_GENERATION_PROMPT_TEMPLATE

@@ -356,6 +356,16 @@ class ChatTable:
         try:
             with get_db_context(db) as db:
                 chat_item = db.get(Chat, id)
+
+                # Preserve evicted flags from existing messages
+                existing_chat = chat_item.chat or {}
+                existing_messages = existing_chat.get("history", {}).get("messages", {})
+                new_messages = chat.get("history", {}).get("messages", {})
+
+                for msg_id, existing_msg in existing_messages.items():
+                    if existing_msg.get("evicted") and msg_id in new_messages:
+                        new_messages[msg_id]["evicted"] = True
+
                 chat_item.chat = self._clean_null_bytes(chat)
                 chat_item.title = (
                     self._clean_null_bytes(chat["title"])
@@ -469,6 +479,34 @@ class ChatTable:
 
         chat["history"] = history
         return self.update_chat_by_id(id, chat)
+
+    def mark_messages_as_evicted(
+        self, id: str, message_ids: list[str], db: Optional[Session] = None
+    ) -> Optional[ChatModel]:
+        """Mark multiple messages as evicted in a single transaction."""
+        try:
+            with get_db_context(db) as db:
+                chat = self.get_chat_by_id(id, db=db)
+                if not chat:
+                    return None
+
+                chat_data = chat.chat
+                history = chat_data.get("history", {})
+                messages = history.get("messages", {})
+
+                marked_count = 0
+                for msg_id in message_ids:
+                    if msg_id in messages:
+                        messages[msg_id]["evicted"] = True
+                        marked_count += 1
+
+                if marked_count > 0:
+                    log.info(f"Marked {marked_count} messages as evicted in chat {id}")
+                    return self.update_chat_by_id(id, chat_data, db=db)
+                return chat
+        except Exception as e:
+            log.error(f"Failed to mark messages as evicted: {e}")
+            return None
 
     def add_message_files_by_id_and_message_id(
         self, id: str, message_id: str, files: list[dict]

@@ -1892,10 +1892,12 @@
 						content: `${params?.system ?? $settings?.system ?? ''}`
 					}
 				: undefined,
-			..._messages.map((message) => ({
-				...message,
-				content: processDetails(message.content)
-			}))
+			..._messages
+				.filter((message) => !message.evicted)
+				.map((message) => ({
+					...message,
+					content: processDetails(message.content)
+				}))
 		].filter((message) => message);
 
 		messages = messages
@@ -1905,6 +1907,7 @@
 				);
 
 				return {
+					id: message.id,
 					role: message.role,
 					...(message.role === 'user' && imageFiles.length > 0
 						? {
@@ -2456,6 +2459,7 @@
 						title={$chatTitle}
 						bind:selectedModels
 						shareEnabled={!!history.currentId}
+						showModelSelector={$config?.enable_model_selector !== false}
 						{initNewChat}
 						archiveChatHandler={() => {}}
 						{moveChatHandler}

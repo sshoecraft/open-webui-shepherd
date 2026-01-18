@@ -6,7 +6,7 @@
 	import { toast } from 'svelte-sonner';
 
 	import { getBackendConfig, getModels, getTaskConfig, updateTaskConfig } from '$lib/apis';
-	import { setDefaultPromptSuggestions } from '$lib/apis/configs';
+	import { setDefaultPromptSuggestions, getModelsConfig, setModelsConfig } from '$lib/apis/configs';
 	import { config, settings, user } from '$lib/stores';
 	import { createEventDispatcher, onMount, getContext } from 'svelte';
 
@@ -15,11 +15,13 @@
 
 	import { getBaseModels } from '$lib/apis/models';
 	import { getBanners, setBanners } from '$lib/apis/configs';
+	import { verifyOpenAIConnection } from '$lib/apis/openai';
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
 	import Textarea from '$lib/components/common/Textarea.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
+	import ArrowPath from '$lib/components/icons/ArrowPath.svelte';
 	import Banners from './Interface/Banners.svelte';
 	import PromptSuggestions from '$lib/components/workspace/Models/PromptSuggestions.svelte';
 
@@ -27,9 +29,44 @@
 
 	const i18n = getContext('i18n');
 
+	let taskModelUrlStatus = null; // null = not tested, true = success, false = failed
+	let taskModelUrlTesting = false;
+
+	const testTaskModelUrl = async () => {
+		if (!taskConfig.TASK_MODEL_URL) {
+			toast.error($i18n.t('Please enter a URL first'));
+			return;
+		}
+
+		taskModelUrlTesting = true;
+		taskModelUrlStatus = null;
+
+		try {
+			const url = taskConfig.TASK_MODEL_URL.replace(/\/$/, '');
+			const res = await verifyOpenAIConnection(
+				localStorage.token,
+				{ url, key: '', config: {} },
+				false
+			);
+
+			if (res) {
+				taskModelUrlStatus = true;
+				toast.success($i18n.t('Server connection verified'));
+			} else {
+				taskModelUrlStatus = false;
+			}
+		} catch (error) {
+			taskModelUrlStatus = false;
+			toast.error(`${error}`);
+		} finally {
+			taskModelUrlTesting = false;
+		}
+	};
+
 	let taskConfig = {
 		TASK_MODEL: '',
 		TASK_MODEL_EXTERNAL: '',
+		TASK_MODEL_URL: '',
 		ENABLE_TITLE_GENERATION: true,
 		TITLE_GENERATION_PROMPT_TEMPLATE: '',
 		ENABLE_FOLLOW_UP_GENERATION: true,
@@ -48,6 +85,9 @@
 
 	let promptSuggestions = [];
 	let banners: Banner[] = [];
+	let enableIntegrationsMenu = true;
+	let enableChatControls = true;
+	let enableTemporaryChat = true;
 
 	const updateInterfaceHandler = async () => {
 		taskConfig = await updateTaskConfig(localStorage.token, taskConfig);
@@ -55,6 +95,12 @@
 		promptSuggestions = promptSuggestions.filter((p) => p.content !== '');
 		promptSuggestions = await setDefaultPromptSuggestions(localStorage.token, promptSuggestions);
 		await updateBanners();
+
+		await setModelsConfig(localStorage.token, {
+			ENABLE_INTEGRATIONS_MENU: enableIntegrationsMenu,
+			ENABLE_CHAT_CONTROLS: enableChatControls,
+			ENABLE_TEMPORARY_CHAT: enableTemporaryChat
+		});
 
 		await config.set(await getBackendConfig());
 	};
@@ -72,6 +118,11 @@
 		taskConfig = await getTaskConfig(localStorage.token);
 		promptSuggestions = $config?.default_prompt_suggestions ?? [];
 		banners = await getBanners(localStorage.token);
+
+		const modelsConfig = await getModelsConfig(localStorage.token);
+		enableIntegrationsMenu = modelsConfig?.ENABLE_INTEGRATIONS_MENU ?? true;
+		enableChatControls = modelsConfig?.ENABLE_CHAT_CONTROLS ?? true;
+		enableTemporaryChat = modelsConfig?.ENABLE_TEMPORARY_CHAT ?? true;
 
 		workspaceModels = await getBaseModels(localStorage.token);
 		baseModels = await getModels(localStorage.token, null, false);
@@ -210,6 +261,36 @@
 								</option>
 							{/each}
 						</select>
+					</div>
+				</div>
+
+				<div class="mb-2.5">
+					<div class=" text-xs mb-1">{$i18n.t('Task Model URL (Direct)')}</div>
+					<div class="flex gap-2 items-center">
+						<input
+							class="flex-1 rounded-lg py-2 px-4 text-sm bg-gray-50 dark:text-gray-300 dark:bg-gray-850 outline-hidden"
+							type="text"
+							placeholder="http://localhost:8001/v1"
+							bind:value={taskConfig.TASK_MODEL_URL}
+						/>
+						<Tooltip content={$i18n.t('Verify Connection')}>
+							<button
+								class="p-2 rounded-lg bg-gray-50 dark:bg-gray-850 hover:bg-gray-100 dark:hover:bg-gray-800 transition {taskModelUrlStatus === true ? 'text-green-500' : taskModelUrlStatus === false ? 'text-red-500' : ''}"
+								type="button"
+								on:click={testTaskModelUrl}
+								disabled={taskModelUrlTesting}
+								aria-label={$i18n.t('Verify Connection')}
+							>
+								{#if taskModelUrlTesting}
+									<Spinner className="size-4" />
+								{:else}
+									<ArrowPath className="size-4" />
+								{/if}
+							</button>
+						</Tooltip>
+					</div>
+					<div class="text-xs text-gray-500 mt-1">
+						{$i18n.t('Optional: Direct URL to an OpenAI-compatible endpoint for tasks. Bypasses model list.')}
 					</div>
 				</div>
 
@@ -417,6 +498,36 @@
 							)}
 						/>
 					</Tooltip>
+				</div>
+			</div>
+
+			<div class="mb-3.5">
+				<div class=" mt-0.5 mb-2.5 text-base font-medium">{$i18n.t('Chat')}</div>
+
+				<hr class=" border-gray-100/30 dark:border-gray-850/30 my-2" />
+
+				<div class="mb-2.5 flex w-full items-center justify-between">
+					<div class="self-center text-xs font-medium">
+						{$i18n.t('Show Integrations Menu')}
+					</div>
+
+					<Switch bind:state={enableIntegrationsMenu} />
+				</div>
+
+				<div class="mb-2.5 flex w-full items-center justify-between">
+					<div class="self-center text-xs font-medium">
+						{$i18n.t('Show Chat Controls')}
+					</div>
+
+					<Switch bind:state={enableChatControls} />
+				</div>
+
+				<div class="mb-2.5 flex w-full items-center justify-between">
+					<div class="self-center text-xs font-medium">
+						{$i18n.t('Show Temporary Chat')}
+					</div>
+
+					<Switch bind:state={enableTemporaryChat} />
 				</div>
 			</div>
 

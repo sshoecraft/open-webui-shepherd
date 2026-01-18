@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from open_webui.internal.db import get_session
 
 from open_webui.models.models import Models
+from open_webui.models.chats import Chats
 from open_webui.config import (
     CACHE_DIR,
 )
@@ -810,6 +811,7 @@ async def generate_chat_completion(
     bypass_system_prompt: bool = False,
     db: Session = Depends(get_session),
 ):
+    log.info("=== generate_chat_completion called ===")
     if BYPASS_MODEL_ACCESS_CONTROL:
         bypass_filter = True
 
@@ -934,13 +936,46 @@ async def generate_chat_completion(
     else:
         request_url = f"{url}/chat/completions"
 
+    # Pre-filter evicted messages from DB before sending
+    if metadata and metadata.get("chat_id"):
+        chat_id = metadata.get("chat_id")
+        log.info(f"Pre-filter check: chat_id={chat_id}")
+        if not chat_id.startswith("local:"):
+            chat = Chats.get_chat_by_id(chat_id)
+            if chat:
+                evicted_msg_ids = set()
+                db_messages = chat.chat.get("history", {}).get("messages", {})
+                for msg_id, msg_data in db_messages.items():
+                    if msg_data.get("evicted"):
+                        evicted_msg_ids.add(msg_id)
+
+                log.info(f"Pre-filter: {len(evicted_msg_ids)} evicted IDs in DB: {list(evicted_msg_ids)[:3]}...")
+
+                # Debug: check if payload messages have IDs
+                msg_ids_in_payload = [m.get("id") for m in payload.get("messages", [])]
+                log.info(f"Pre-filter: payload has {len(msg_ids_in_payload)} messages, IDs: {msg_ids_in_payload[:3]}...")
+
+                if evicted_msg_ids:
+                    original_count = len(payload.get("messages", []))
+                    payload["messages"] = [
+                        m for m in payload.get("messages", [])
+                        if m.get("id") not in evicted_msg_ids
+                    ]
+                    filtered_count = original_count - len(payload["messages"])
+                    if filtered_count > 0:
+                        log.info(f"Pre-filtered {filtered_count} evicted messages from payload")
+                    else:
+                        log.info(f"Pre-filter: no messages matched evicted IDs")
+
     # Retry loop for context overflow handling
     # Keep payload as dict for potential message eviction
     original_messages = payload.get("messages", []).copy()
     last_error_response = None
     last_status = 500
+    all_evicted_ids = []  # Accumulate evicted IDs across retries
 
     for attempt in range(MAX_CONTEXT_RETRIES):
+        log.info(f"=== Request attempt {attempt + 1}/{MAX_CONTEXT_RETRIES}, {len(payload.get('messages', []))} messages ===")
         payload_json = json.dumps(payload)
 
         r = None
@@ -962,15 +997,96 @@ async def generate_chat_completion(
                 ssl=AIOHTTP_CLIENT_SESSION_SSL,
             )
 
-            # Check if response is SSE
+            # Check status FIRST - handle errors before streaming
+            # This catches context overflow errors even with stream=true
+            log.info(f"=== Response status: {r.status} ===")
+            if r.status >= 400:
+                try:
+                    response = await r.json()
+                except Exception as e:
+                    log.error(e)
+                    response = await r.text()
+
+                last_status = r.status
+                last_error_response = response
+
+                # Check if this is a context overflow error we can retry
+                if r.status == 400 and is_context_overflow_error(response):
+                    # Try to parse how many tokens to evict
+                    error_msg = ""
+                    if isinstance(response, dict):
+                        error_obj = response.get("error", {})
+                        if isinstance(error_obj, dict):
+                            error_msg = error_obj.get("message", "")
+                        else:
+                            error_msg = str(error_obj)
+                    else:
+                        error_msg = str(response)
+
+                    tokens_needed = parse_overflow_error(error_msg)
+                    evicted_ids = []
+
+                    # Debug: check original messages for id field before eviction
+                    orig_sample = [{"role": m.get("role"), "id": m.get("id")} for m in payload["messages"][:5]]
+                    log.info(f"Pre-eviction debug: orig_sample={orig_sample}")
+
+                    if tokens_needed > 0:
+                        log.info(
+                            f"Context overflow detected: need to free {tokens_needed} tokens "
+                            f"(attempt {attempt + 1}/{MAX_CONTEXT_RETRIES})"
+                        )
+                        payload["messages"], evicted_ids = evict_messages(
+                            payload["messages"], tokens_needed
+                        )
+                    else:
+                        # Can't parse, use fallback percentage
+                        log.info(
+                            f"Context overflow detected, using fallback eviction "
+                            f"(attempt {attempt + 1}/{MAX_CONTEXT_RETRIES})"
+                        )
+                        payload["messages"], evicted_ids = evict_messages_fallback(
+                            payload["messages"], 0.25
+                        )
+
+                    # Persist evicted message IDs to database
+                    # Debug: check first few messages for id field
+                    sample_msgs = [{"role": m.get("role"), "id": m.get("id")} for m in payload["messages"][:3]]
+                    log.info(f"Eviction debug: sample_msgs={sample_msgs}, evicted_ids={evicted_ids}")
+                    if evicted_ids:
+                        all_evicted_ids.extend(evicted_ids)  # Accumulate for response header
+                        if metadata and metadata.get("chat_id"):
+                            chat_id = metadata.get("chat_id")
+                            log.info(f"Eviction debug: chat_id={chat_id}")
+                            if not chat_id.startswith("local:"):
+                                Chats.mark_messages_as_evicted(chat_id, evicted_ids)
+
+                    # Check if we actually evicted anything
+                    if len(payload["messages"]) < len(original_messages):
+                        await cleanup_response(r, session)
+                        original_messages = payload["messages"].copy()  # Update for next iteration
+                        continue  # Retry with reduced messages
+                    else:
+                        log.warning("No messages could be evicted, returning error")
+
+                # Non-context error or can't retry - return error response
+                if isinstance(response, (dict, list)):
+                    return JSONResponse(status_code=r.status, content=response)
+                else:
+                    return PlainTextResponse(status_code=r.status, content=response)
+
+            # Success (status < 400) - check if streaming
+            response_headers = dict(r.headers)
+            if all_evicted_ids:
+                # Pass evicted IDs to frontend via custom header
+                response_headers["X-Evicted-Message-Ids"] = json.dumps(all_evicted_ids)
+                log.info(f"Added X-Evicted-Message-Ids header with {len(all_evicted_ids)} IDs")
+
             if "text/event-stream" in r.headers.get("Content-Type", ""):
                 streaming = True
-                # For streaming, we can't easily retry after starting
-                # Return the stream as-is (context errors will appear in stream)
                 return StreamingResponse(
                     stream_chunks_handler(r.content),
                     status_code=r.status,
-                    headers=dict(r.headers),
+                    headers=response_headers,
                     background=BackgroundTask(
                         cleanup_response, response=r, session=session
                     ),
@@ -982,56 +1098,9 @@ async def generate_chat_completion(
                     log.error(e)
                     response = await r.text()
 
-                last_status = r.status
-                last_error_response = response
-
-                if r.status >= 400:
-                    # Check if this is a context overflow error
-                    if r.status == 400 and is_context_overflow_error(response):
-                        # Try to parse how many tokens to evict
-                        error_msg = ""
-                        if isinstance(response, dict):
-                            error_obj = response.get("error", {})
-                            if isinstance(error_obj, dict):
-                                error_msg = error_obj.get("message", "")
-                            else:
-                                error_msg = str(error_obj)
-                        else:
-                            error_msg = str(response)
-
-                        tokens_needed = parse_overflow_error(error_msg)
-
-                        if tokens_needed > 0:
-                            log.info(
-                                f"Context overflow detected: need to free {tokens_needed} tokens "
-                                f"(attempt {attempt + 1}/{MAX_CONTEXT_RETRIES})"
-                            )
-                            payload["messages"] = evict_messages(
-                                payload["messages"], tokens_needed
-                            )
-                        else:
-                            # Can't parse, use fallback percentage
-                            log.info(
-                                f"Context overflow detected, using fallback eviction "
-                                f"(attempt {attempt + 1}/{MAX_CONTEXT_RETRIES})"
-                            )
-                            payload["messages"] = evict_messages_fallback(
-                                payload["messages"], 0.25
-                            )
-
-                        # Check if we actually evicted anything
-                        if len(payload["messages"]) < len(original_messages):
-                            await cleanup_response(r, session)
-                            continue  # Retry with reduced messages
-                        else:
-                            log.warning("No messages could be evicted, returning error")
-
-                    # Non-context error or can't retry
-                    if isinstance(response, (dict, list)):
-                        return JSONResponse(status_code=r.status, content=response)
-                    else:
-                        return PlainTextResponse(status_code=r.status, content=response)
-
+                # For non-streaming, return JSONResponse with headers
+                if all_evicted_ids:
+                    return JSONResponse(content=response, headers=response_headers)
                 return response
         except Exception as e:
             log.exception(e)

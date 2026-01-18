@@ -511,9 +511,13 @@ async def set_code_execution_config(
 # SetDefaultModels
 ############################
 class ModelsConfigForm(BaseModel):
-    DEFAULT_MODELS: Optional[str]
-    DEFAULT_PINNED_MODELS: Optional[str]
-    MODEL_ORDER_LIST: Optional[list[str]]
+    DEFAULT_MODELS: Optional[str] = None
+    DEFAULT_PINNED_MODELS: Optional[str] = None
+    MODEL_ORDER_LIST: Optional[list[str]] = None
+    ENABLE_MODEL_SELECTOR: Optional[bool] = None
+    ENABLE_INTEGRATIONS_MENU: Optional[bool] = None
+    ENABLE_CHAT_CONTROLS: Optional[bool] = None
+    ENABLE_TEMPORARY_CHAT: Optional[bool] = None
 
 
 @router.get("/models", response_model=ModelsConfigForm)
@@ -522,6 +526,10 @@ async def get_models_config(request: Request, user=Depends(get_admin_user)):
         "DEFAULT_MODELS": request.app.state.config.DEFAULT_MODELS,
         "DEFAULT_PINNED_MODELS": request.app.state.config.DEFAULT_PINNED_MODELS,
         "MODEL_ORDER_LIST": request.app.state.config.MODEL_ORDER_LIST,
+        "ENABLE_MODEL_SELECTOR": request.app.state.config.ENABLE_MODEL_SELECTOR,
+        "ENABLE_INTEGRATIONS_MENU": request.app.state.config.ENABLE_INTEGRATIONS_MENU,
+        "ENABLE_CHAT_CONTROLS": request.app.state.config.ENABLE_CHAT_CONTROLS,
+        "ENABLE_TEMPORARY_CHAT": request.app.state.config.ENABLE_TEMPORARY_CHAT,
     }
 
 
@@ -529,13 +537,28 @@ async def get_models_config(request: Request, user=Depends(get_admin_user)):
 async def set_models_config(
     request: Request, form_data: ModelsConfigForm, user=Depends(get_admin_user)
 ):
-    request.app.state.config.DEFAULT_MODELS = form_data.DEFAULT_MODELS
-    request.app.state.config.DEFAULT_PINNED_MODELS = form_data.DEFAULT_PINNED_MODELS
-    request.app.state.config.MODEL_ORDER_LIST = form_data.MODEL_ORDER_LIST
+    if form_data.DEFAULT_MODELS is not None:
+        request.app.state.config.DEFAULT_MODELS = form_data.DEFAULT_MODELS
+    if form_data.DEFAULT_PINNED_MODELS is not None:
+        request.app.state.config.DEFAULT_PINNED_MODELS = form_data.DEFAULT_PINNED_MODELS
+    if form_data.MODEL_ORDER_LIST is not None:
+        request.app.state.config.MODEL_ORDER_LIST = form_data.MODEL_ORDER_LIST
+    if form_data.ENABLE_MODEL_SELECTOR is not None:
+        request.app.state.config.ENABLE_MODEL_SELECTOR = form_data.ENABLE_MODEL_SELECTOR
+    if form_data.ENABLE_INTEGRATIONS_MENU is not None:
+        request.app.state.config.ENABLE_INTEGRATIONS_MENU = form_data.ENABLE_INTEGRATIONS_MENU
+    if form_data.ENABLE_CHAT_CONTROLS is not None:
+        request.app.state.config.ENABLE_CHAT_CONTROLS = form_data.ENABLE_CHAT_CONTROLS
+    if form_data.ENABLE_TEMPORARY_CHAT is not None:
+        request.app.state.config.ENABLE_TEMPORARY_CHAT = form_data.ENABLE_TEMPORARY_CHAT
     return {
         "DEFAULT_MODELS": request.app.state.config.DEFAULT_MODELS,
         "DEFAULT_PINNED_MODELS": request.app.state.config.DEFAULT_PINNED_MODELS,
         "MODEL_ORDER_LIST": request.app.state.config.MODEL_ORDER_LIST,
+        "ENABLE_MODEL_SELECTOR": request.app.state.config.ENABLE_MODEL_SELECTOR,
+        "ENABLE_INTEGRATIONS_MENU": request.app.state.config.ENABLE_INTEGRATIONS_MENU,
+        "ENABLE_CHAT_CONTROLS": request.app.state.config.ENABLE_CHAT_CONTROLS,
+        "ENABLE_TEMPORARY_CHAT": request.app.state.config.ENABLE_TEMPORARY_CHAT,
     }
 
 

@@ -399,7 +399,8 @@
 				try {
 					const directConnections = $settings?.directConnections ?? {};
 
-					if (directConnections) {
+					// Only use direct connections if admin has enabled the feature AND user has configured URLs
+					if ($config?.features?.enable_direct_connections && directConnections?.OPENAI_API_BASE_URLS?.length > 0) {
 						const urlIdx = model?.urlIdx;
 
 						const OPENAI_API_URL = directConnections.OPENAI_API_BASE_URLS[urlIdx];

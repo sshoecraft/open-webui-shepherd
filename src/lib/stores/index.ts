@@ -259,6 +259,10 @@ type Config = {
 	version: string;
 	default_locale: string;
 	default_models: string;
+	enable_model_selector?: boolean;
+	enable_integrations_menu?: boolean;
+	enable_chat_controls?: boolean;
+	enable_temporary_chat?: boolean;
 	default_prompt_suggestions: PromptSuggestion[];
 	features: {
 		auth: boolean;

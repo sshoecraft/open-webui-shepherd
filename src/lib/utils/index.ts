@@ -84,7 +84,41 @@ export const sanitizeResponseContent = (content: string) => {
 		.trim();
 };
 
+// Extract text from raw JSON tool results that models sometimes output directly
+// Pattern: { "results": [{ "type": "text", "text": "..." }, ...] }
+// Also handles when wrapped in quotes: "{ ... }"
+// Can appear at start of content followed by more text
+const extractToolResultsText = (content: string): string => {
+	// Pattern to match JSON with results array (optionally quoted)
+	const jsonPattern = /"?\{\s*"results"\s*:\s*\[[\s\S]*?\]\s*\}"?/g;
+
+	return content.replace(jsonPattern, (match) => {
+		let jsonStr = match.trim();
+
+		// Remove surrounding quotes if present
+		if (jsonStr.startsWith('"') && jsonStr.endsWith('"')) {
+			jsonStr = jsonStr.slice(1, -1);
+		}
+
+		try {
+			const parsed = JSON.parse(jsonStr);
+			if (parsed.results && Array.isArray(parsed.results)) {
+				const textParts = parsed.results
+					.filter((r: any) => r.type === 'text' && r.text)
+					.map((r: any) => r.text);
+				if (textParts.length > 0) {
+					return textParts.join('\n');
+				}
+			}
+		} catch {
+			// Not valid JSON, return original match
+		}
+		return match;
+	});
+};
+
 export const processResponseContent = (content: string) => {
+	content = extractToolResultsText(content);
 	content = processChineseContent(content);
 	return content.trim();
 };

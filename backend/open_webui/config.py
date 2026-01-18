@@ -1164,6 +1164,30 @@ DEFAULT_PINNED_MODELS = PersistentConfig(
     os.environ.get("DEFAULT_PINNED_MODELS", None),
 )
 
+ENABLE_MODEL_SELECTOR = PersistentConfig(
+    "ENABLE_MODEL_SELECTOR",
+    "ui.enable_model_selector",
+    os.environ.get("ENABLE_MODEL_SELECTOR", "True").lower() == "true",
+)
+
+ENABLE_INTEGRATIONS_MENU = PersistentConfig(
+    "ENABLE_INTEGRATIONS_MENU",
+    "ui.enable_integrations_menu",
+    os.environ.get("ENABLE_INTEGRATIONS_MENU", "True").lower() == "true",
+)
+
+ENABLE_CHAT_CONTROLS = PersistentConfig(
+    "ENABLE_CHAT_CONTROLS",
+    "ui.enable_chat_controls",
+    os.environ.get("ENABLE_CHAT_CONTROLS", "True").lower() == "true",
+)
+
+ENABLE_TEMPORARY_CHAT = PersistentConfig(
+    "ENABLE_TEMPORARY_CHAT",
+    "ui.enable_temporary_chat",
+    os.environ.get("ENABLE_TEMPORARY_CHAT", "True").lower() == "true",
+)
+
 try:
     default_prompt_suggestions = json.loads(
         os.environ.get("DEFAULT_PROMPT_SUGGESTIONS", "[]")
@@ -1741,6 +1765,12 @@ TASK_MODEL_EXTERNAL = PersistentConfig(
     os.environ.get("TASK_MODEL_EXTERNAL", ""),
 )
 
+TASK_MODEL_URL = PersistentConfig(
+    "TASK_MODEL_URL",
+    "task.model.url",
+    os.environ.get("TASK_MODEL_URL", ""),
+)
+
 TITLE_GENERATION_PROMPT_TEMPLATE = PersistentConfig(
     "TITLE_GENERATION_PROMPT_TEMPLATE",
     "task.title.prompt_template",
@@ -1831,7 +1861,7 @@ FOLLOW_UP_GENERATION_PROMPT_TEMPLATE = PersistentConfig(
 DEFAULT_FOLLOW_UP_GENERATION_PROMPT_TEMPLATE = """### Task:
 Suggest 3-5 relevant follow-up questions or prompts that the user might naturally ask next in this conversation as a **user**, based on the chat history, to help continue or deepen the discussion.
 ### Guidelines:
-- Write all follow-up questions from the user’s point of view, directed to the assistant.
+- Write all follow-up questions from the user's point of view, directed to the assistant.
 - Make questions concise, clear, and directly related to the discussed topic(s).
 - Only suggest follow-ups that make sense given the chat content and do not repeat what was already covered.
 - If the conversation is very short or not specific, suggest more general (but relevant) follow-ups the user might ask.
