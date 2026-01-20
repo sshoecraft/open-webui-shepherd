@@ -32,6 +32,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_access, has_permission
 from open_webui.config import BYPASS_ADMIN_ACCESS_CONTROL, STATIC_DIR
+from open_webui.env import DATA_DIR
+from pathlib import Path
 from open_webui.internal.db import get_session
 from sqlalchemy.orm import Session
 
@@ -376,8 +378,22 @@ def get_model_profile_image(
                 except Exception as e:
                     pass
 
+        # Check for custom branding logo first
+        branding_dir = Path(DATA_DIR) / "branding"
+        for ext in ["png", "jpg", "jpeg", "svg", "webp"]:
+            logo_path = branding_dir / f"logo.{ext}"
+            if logo_path.exists():
+                return FileResponse(str(logo_path))
+
         return FileResponse(f"{STATIC_DIR}/favicon.png")
     else:
+        # Check for custom branding logo first
+        branding_dir = Path(DATA_DIR) / "branding"
+        for ext in ["png", "jpg", "jpeg", "svg", "webp"]:
+            logo_path = branding_dir / f"logo.{ext}"
+            if logo_path.exists():
+                return FileResponse(str(logo_path))
+
         return FileResponse(f"{STATIC_DIR}/favicon.png")
 
 

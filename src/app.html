@@ -90,7 +90,13 @@
 				logo.id = 'logo';
 				logo.style =
 					'position: absolute; width: auto; height: 6rem; top: 44%; left: 50%; transform: translateX(-50%); display:block;';
-				logo.src = isDarkMode ? '/static/splash-dark.png' : '/static/splash.png';
+
+				// Try custom branding logo first, fall back to default splash
+				const defaultSrc = isDarkMode ? '/static/splash-dark.png' : '/static/splash.png';
+				logo.src = '/api/v1/configs/branding/logo';
+				logo.onerror = function() {
+					logo.src = defaultSrc;
+				};
 
 				document.addEventListener('DOMContentLoaded', function () {
 					const splash = document.getElementById('splash-screen');
@@ -138,7 +144,8 @@
 				<img
 					id="logo-her"
 					style="width: auto; height: 13rem"
-					src="/static/splash.png"
+					src="/api/v1/configs/branding/logo"
+					onerror="this.onerror=null; this.src='/static/splash.png';"
 					class="animate-pulse-fast"
 				/>
 

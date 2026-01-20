@@ -18,6 +18,7 @@ cd "$SCRIPT_DIR/backend" || exit 1
 # Set environment variables
 export PYTHONUNBUFFERED=1
 export PYTHONPYCACHEPREFIX="$PREFIX/tmp/__pycache__"
+export DATA_DIR="$PREFIX"
 
 # Activate venv
 source "$VENV_PATH/bin/activate"

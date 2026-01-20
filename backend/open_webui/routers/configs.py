@@ -1,10 +1,16 @@
 import logging
 import copy
-from fastapi import APIRouter, Depends, Request, HTTPException
+import os
+import shutil
+from pathlib import Path
+from fastapi import APIRouter, Depends, Request, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 import aiohttp
 
 from typing import Optional
+
+from open_webui.env import DATA_DIR
 
 from open_webui.env import AIOHTTP_CLIENT_TIMEOUT
 from open_webui.utils.auth import get_admin_user, get_verified_user
@@ -608,3 +614,104 @@ async def get_banners(
     user=Depends(get_verified_user),
 ):
     return request.app.state.config.BANNERS
+
+
+############################
+# Branding
+############################
+
+
+class BrandingConfigForm(BaseModel):
+    CUSTOM_NAME: Optional[str] = None
+    CUSTOM_LOGO: Optional[str] = None
+
+
+@router.get("/branding")
+async def get_branding_config(request: Request, user=Depends(get_verified_user)):
+    return {
+        "CUSTOM_NAME": request.app.state.config.CUSTOM_NAME,
+        "CUSTOM_LOGO": request.app.state.config.CUSTOM_LOGO,
+    }
+
+
+@router.post("/branding")
+async def set_branding_config(
+    request: Request, form_data: BrandingConfigForm, user=Depends(get_admin_user)
+):
+    if form_data.CUSTOM_NAME is not None:
+        request.app.state.config.CUSTOM_NAME = form_data.CUSTOM_NAME
+    if form_data.CUSTOM_LOGO is not None:
+        request.app.state.config.CUSTOM_LOGO = form_data.CUSTOM_LOGO
+    return {
+        "CUSTOM_NAME": request.app.state.config.CUSTOM_NAME,
+        "CUSTOM_LOGO": request.app.state.config.CUSTOM_LOGO,
+    }
+
+
+@router.post("/branding/logo")
+async def upload_branding_logo(
+    request: Request,
+    file: UploadFile = File(...),
+    user=Depends(get_admin_user),
+):
+    """Upload a custom logo for branding."""
+    # Create branding directory if it doesn't exist
+    branding_dir = Path(DATA_DIR) / "branding"
+    branding_dir.mkdir(parents=True, exist_ok=True)
+
+    # Validate file type
+    allowed_types = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}",
+        )
+
+    # Save file as logo with appropriate extension
+    ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+    logo_path = branding_dir / f"logo.{ext}"
+
+    # Remove any existing logo files
+    for existing in branding_dir.glob("logo.*"):
+        existing.unlink()
+
+    # Save the new logo
+    with open(logo_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # Update config to point to the logo
+    relative_path = f"branding/logo.{ext}"
+    request.app.state.config.CUSTOM_LOGO = relative_path
+
+    return {"CUSTOM_LOGO": relative_path}
+
+
+@router.get("/branding/logo")
+async def get_branding_logo(request: Request):
+    """Serve the custom logo if it exists, otherwise return default."""
+    custom_logo = request.app.state.config.CUSTOM_LOGO
+    if custom_logo:
+        logo_path = Path(DATA_DIR) / custom_logo
+        if logo_path.exists():
+            return FileResponse(logo_path)
+
+    # Return 404 if no custom logo - frontend will use default
+    raise HTTPException(status_code=404, detail="No custom logo configured")
+
+
+@router.delete("/branding/logo")
+async def delete_branding_logo(
+    request: Request,
+    user=Depends(get_admin_user),
+):
+    """Delete the custom logo and revert to default."""
+    branding_dir = Path(DATA_DIR) / "branding"
+
+    # Remove any existing logo files
+    for existing in branding_dir.glob("logo.*"):
+        existing.unlink()
+
+    # Clear the config
+    request.app.state.config.CUSTOM_LOGO = ""
+
+    return {"CUSTOM_LOGO": ""}

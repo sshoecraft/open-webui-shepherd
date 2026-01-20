@@ -7,14 +7,15 @@
 
 	import { getBackendConfig, getModels, getTaskConfig, updateTaskConfig } from '$lib/apis';
 	import { setDefaultPromptSuggestions, getModelsConfig, setModelsConfig } from '$lib/apis/configs';
-	import { config, settings, user } from '$lib/stores';
+	import { config, settings, user, WEBUI_NAME } from '$lib/stores';
 	import { createEventDispatcher, onMount, getContext } from 'svelte';
 
 	import { banners as _banners } from '$lib/stores';
 	import type { Banner } from '$lib/types';
 
 	import { getBaseModels } from '$lib/apis/models';
-	import { getBanners, setBanners } from '$lib/apis/configs';
+	import { getBanners, setBanners, getBrandingConfig, setBrandingConfig, uploadBrandingLogo, deleteBrandingLogo } from '$lib/apis/configs';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import { verifyOpenAIConnection } from '$lib/apis/openai';
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -89,6 +90,37 @@
 	let enableChatControls = true;
 	let enableTemporaryChat = true;
 
+	// Branding
+	let customName = '';
+	let customLogo = '';
+	let logoFileInput: HTMLInputElement;
+
+	const handleLogoUpload = async (event: Event) => {
+		const target = event.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (!file) return;
+
+		try {
+			const result = await uploadBrandingLogo(localStorage.token, file);
+			if (result) {
+				customLogo = result.CUSTOM_LOGO;
+				toast.success($i18n.t('Logo uploaded successfully'));
+			}
+		} catch (error) {
+			toast.error($i18n.t('Failed to upload logo'));
+		}
+	};
+
+	const handleLogoDelete = async () => {
+		try {
+			await deleteBrandingLogo(localStorage.token);
+			customLogo = '';
+			toast.success($i18n.t('Logo deleted successfully'));
+		} catch (error) {
+			toast.error($i18n.t('Failed to delete logo'));
+		}
+	};
+
 	const updateInterfaceHandler = async () => {
 		taskConfig = await updateTaskConfig(localStorage.token, taskConfig);
 
@@ -102,7 +134,16 @@
 			ENABLE_TEMPORARY_CHAT: enableTemporaryChat
 		});
 
-		await config.set(await getBackendConfig());
+		// Save branding config
+		await setBrandingConfig(localStorage.token, {
+			CUSTOM_NAME: customName,
+			CUSTOM_LOGO: customLogo
+		});
+
+		const backendConfig = await getBackendConfig();
+		await config.set(backendConfig);
+		// Update the WEBUI_NAME store so sidebar updates immediately
+		await WEBUI_NAME.set(backendConfig.name);
 	};
 
 	const updateBanners = async () => {
@@ -123,6 +164,11 @@
 		enableIntegrationsMenu = modelsConfig?.ENABLE_INTEGRATIONS_MENU ?? true;
 		enableChatControls = modelsConfig?.ENABLE_CHAT_CONTROLS ?? true;
 		enableTemporaryChat = modelsConfig?.ENABLE_TEMPORARY_CHAT ?? true;
+
+		// Load branding config
+		const brandingConfig = await getBrandingConfig(localStorage.token);
+		customName = brandingConfig?.CUSTOM_NAME ?? '';
+		customLogo = brandingConfig?.CUSTOM_LOGO ?? '';
 
 		workspaceModels = await getBaseModels(localStorage.token);
 		baseModels = await getModels(localStorage.token, null, false);
@@ -586,6 +632,67 @@
 						</div>
 					{/if}
 				{/if}
+			</div>
+
+			<div class="mb-3.5">
+				<div class=" mt-0.5 mb-2.5 text-base font-medium">{$i18n.t('Branding')}</div>
+
+				<hr class=" border-gray-100/30 dark:border-gray-850/30 my-2" />
+
+				<div class="mb-2.5">
+					<div class=" self-center text-xs mb-1">{$i18n.t('Application Name')}</div>
+					<Tooltip content={$i18n.t('Leave empty to use default name')} placement="top-start">
+						<input
+							class="w-full rounded-lg py-2 px-4 text-sm bg-gray-50 dark:text-gray-300 dark:bg-gray-850 outline-hidden"
+							type="text"
+							placeholder={$i18n.t('Open WebUI')}
+							bind:value={customName}
+						/>
+					</Tooltip>
+				</div>
+
+				<div class="mb-2.5">
+					<div class=" self-center text-xs mb-1">{$i18n.t('Logo')}</div>
+					<div class="flex items-center gap-3">
+						{#if customLogo}
+							<img
+								src={`${WEBUI_API_BASE_URL}/configs/branding/logo?t=${Date.now()}`}
+								alt="Custom Logo"
+								class="w-12 h-12 object-contain rounded border border-gray-200 dark:border-gray-700"
+							/>
+							<button
+								class="px-3 py-1.5 text-xs font-medium bg-red-500 hover:bg-red-600 text-white transition rounded-lg"
+								type="button"
+								on:click={handleLogoDelete}
+							>
+								{$i18n.t('Delete')}
+							</button>
+						{:else}
+							<div class="w-12 h-12 rounded border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-400">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+								</svg>
+							</div>
+						{/if}
+						<input
+							type="file"
+							accept="image/png,image/jpeg,image/svg+xml,image/webp"
+							class="hidden"
+							bind:this={logoFileInput}
+							on:change={handleLogoUpload}
+						/>
+						<button
+							class="px-3 py-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition rounded-lg"
+							type="button"
+							on:click={() => logoFileInput.click()}
+						>
+							{$i18n.t('Upload Logo')}
+						</button>
+					</div>
+					<div class="text-xs text-gray-500 mt-1">
+						{$i18n.t('Recommended size: 44x44 pixels. Supports PNG, JPEG, SVG, WebP.')}
+					</div>
+				</div>
 			</div>
 		</div>
 

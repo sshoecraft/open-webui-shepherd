@@ -670,8 +670,8 @@
 					>
 						<div class=" self-center flex items-center justify-center size-9">
 							<img
-								src="{WEBUI_BASE_URL}/static/favicon.png"
-								class="sidebar-new-chat-icon size-6 rounded-full group-hover:hidden"
+								src={$config?.custom_logo ? `${WEBUI_API_BASE_URL}/configs/branding/logo` : `${WEBUI_BASE_URL}/static/favicon.png`}
+								class="sidebar-new-chat-icon size-6 {$config?.custom_logo ? '' : 'rounded-full'} group-hover:hidden"
 								alt=""
 							/>
 
@@ -868,8 +868,8 @@
 				>
 					<img
 						crossorigin="anonymous"
-						src="{WEBUI_BASE_URL}/static/favicon.png"
-						class="sidebar-new-chat-icon size-6 rounded-full"
+						src={$config?.custom_logo ? `${WEBUI_API_BASE_URL}/configs/branding/logo` : `${WEBUI_BASE_URL}/static/favicon.png`}
+						class="sidebar-new-chat-icon size-6 {$config?.custom_logo ? '' : 'rounded-full'}"
 						alt=""
 					/>
 				</a>

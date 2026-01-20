@@ -241,8 +241,8 @@
 									<img
 										id="logo"
 										crossorigin="anonymous"
-										src="{WEBUI_BASE_URL}/static/favicon.png"
-										class="size-24 rounded-full"
+										src={$config?.custom_logo ? `${WEBUI_API_BASE_URL}/configs/branding/logo` : `${WEBUI_BASE_URL}/static/favicon.png`}
+										class="size-24 {$config?.custom_logo ? '' : 'rounded-full'}"
 										alt=""
 									/>
 								</div>
@@ -587,8 +587,8 @@
 						<img
 							id="logo"
 							crossorigin="anonymous"
-							src="{WEBUI_BASE_URL}/static/favicon.png"
-							class=" w-6 rounded-full"
+							src={$config?.custom_logo ? `${WEBUI_API_BASE_URL}/configs/branding/logo` : `${WEBUI_BASE_URL}/static/favicon.png`}
+							class=" w-6 {$config?.custom_logo ? '' : 'rounded-full'}"
 							alt=""
 						/>
 					</div>
