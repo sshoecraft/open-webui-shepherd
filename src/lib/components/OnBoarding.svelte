@@ -2,7 +2,8 @@
 	import { getContext, onMount } from 'svelte';
 	const i18n = getContext('i18n');
 
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL } from '$lib/constants';
+	import { config } from '$lib/stores';
 
 	import Marquee from './common/Marquee.svelte';
 	import SlideShow from './common/SlideShow.svelte';
@@ -15,6 +16,13 @@
 		const logo = document.getElementById('logo');
 
 		if (logo) {
+			// If custom logo is configured, use it directly
+			if ($config?.custom_logo) {
+				logo.src = `${WEBUI_API_BASE_URL}/configs/branding/logo`;
+				logo.style.filter = '';
+				return;
+			}
+
 			const isDarkMode = document.documentElement.classList.contains('dark');
 
 			if (isDarkMode) {
@@ -46,8 +54,8 @@
 					<img
 						id="logo"
 						crossorigin="anonymous"
-						src="{WEBUI_BASE_URL}/static/favicon.png"
-						class=" w-6 rounded-full"
+						src={$config?.custom_logo ? `${WEBUI_API_BASE_URL}/configs/branding/logo` : `${WEBUI_BASE_URL}/static/favicon.png`}
+						class=" w-6 {$config?.custom_logo ? '' : 'rounded-full'}"
 						alt="logo"
 					/>
 				</div>

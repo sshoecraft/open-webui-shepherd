@@ -1188,6 +1188,22 @@ ENABLE_TEMPORARY_CHAT = PersistentConfig(
     os.environ.get("ENABLE_TEMPORARY_CHAT", "True").lower() == "true",
 )
 
+####################################
+# Branding
+####################################
+
+CUSTOM_NAME = PersistentConfig(
+    "CUSTOM_NAME",
+    "ui.custom_name",
+    os.environ.get("CUSTOM_NAME", ""),
+)
+
+CUSTOM_LOGO = PersistentConfig(
+    "CUSTOM_LOGO",
+    "ui.custom_logo",
+    os.environ.get("CUSTOM_LOGO", ""),
+)
+
 try:
     default_prompt_suggestions = json.loads(
         os.environ.get("DEFAULT_PROMPT_SUGGESTIONS", "[]")

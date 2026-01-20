@@ -387,6 +387,9 @@ from open_webui.config import (
     ENABLE_INTEGRATIONS_MENU,
     ENABLE_CHAT_CONTROLS,
     ENABLE_TEMPORARY_CHAT,
+    # Branding
+    CUSTOM_NAME,
+    CUSTOM_LOGO,
     DEFAULT_ARENA_MODEL,
     MODEL_ORDER_LIST,
     EVALUATION_ARENA_MODELS,
@@ -786,6 +789,10 @@ app.state.config.ENABLE_MODEL_SELECTOR = ENABLE_MODEL_SELECTOR
 app.state.config.ENABLE_INTEGRATIONS_MENU = ENABLE_INTEGRATIONS_MENU
 app.state.config.ENABLE_CHAT_CONTROLS = ENABLE_CHAT_CONTROLS
 app.state.config.ENABLE_TEMPORARY_CHAT = ENABLE_TEMPORARY_CHAT
+
+# Branding
+app.state.config.CUSTOM_NAME = CUSTOM_NAME
+app.state.config.CUSTOM_LOGO = CUSTOM_LOGO
 app.state.config.MODEL_ORDER_LIST = MODEL_ORDER_LIST
 
 
@@ -1917,11 +1924,15 @@ async def get_app_config(request: Request):
     if user is None:
         onboarding = user_count == 0
 
+    # Use custom name if configured, otherwise fall back to WEBUI_NAME
+    display_name = app.state.config.CUSTOM_NAME if app.state.config.CUSTOM_NAME else app.state.WEBUI_NAME
+
     return {
         **({"onboarding": True} if onboarding else {}),
         "status": True,
-        "name": app.state.WEBUI_NAME,
+        "name": display_name,
         "version": VERSION,
+        "custom_logo": app.state.config.CUSTOM_LOGO if app.state.config.CUSTOM_LOGO else None,
         "default_locale": str(DEFAULT_LOCALE),
         "oauth": {
             "providers": {

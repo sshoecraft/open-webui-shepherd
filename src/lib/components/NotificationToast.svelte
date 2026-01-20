@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { WEBUI_BASE_URL } from '$lib/constants';
-	import { settings, playingNotificationSound, isLastActiveTab } from '$lib/stores';
+	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL } from '$lib/constants';
+	import { settings, playingNotificationSound, isLastActiveTab, config } from '$lib/stores';
 	import DOMPurify from 'dompurify';
 
 	import { marked } from 'marked';
@@ -85,7 +85,7 @@
 	}}
 >
 	<div class="shrink-0 self-top -translate-y-0.5">
-		<img src="{WEBUI_BASE_URL}/static/favicon.png" alt="favicon" class="size-6 rounded-full" />
+		<img src={$config?.custom_logo ? `${WEBUI_API_BASE_URL}/configs/branding/logo` : `${WEBUI_BASE_URL}/static/favicon.png`} alt="favicon" class="size-6 {$config?.custom_logo ? '' : 'rounded-full'}" />
 	</div>
 
 	<div>
