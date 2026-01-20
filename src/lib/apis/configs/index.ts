@@ -480,7 +480,7 @@ export const getBrandingConfig = async (token: string) => {
 
 export const setBrandingConfig = async (
 	token: string,
-	config: { CUSTOM_NAME?: string; CUSTOM_LOGO?: string }
+	config: { CUSTOM_NAME?: string; CUSTOM_LOGO?: string; ENABLE_SPLASH_SCREEN?: boolean }
 ) => {
 	let error = null;
 

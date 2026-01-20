@@ -624,6 +624,7 @@ async def get_banners(
 class BrandingConfigForm(BaseModel):
     CUSTOM_NAME: Optional[str] = None
     CUSTOM_LOGO: Optional[str] = None
+    ENABLE_SPLASH_SCREEN: Optional[bool] = None
 
 
 @router.get("/branding")
@@ -631,6 +632,7 @@ async def get_branding_config(request: Request, user=Depends(get_verified_user))
     return {
         "CUSTOM_NAME": request.app.state.config.CUSTOM_NAME,
         "CUSTOM_LOGO": request.app.state.config.CUSTOM_LOGO,
+        "ENABLE_SPLASH_SCREEN": request.app.state.config.ENABLE_SPLASH_SCREEN,
     }
 
 
@@ -642,9 +644,12 @@ async def set_branding_config(
         request.app.state.config.CUSTOM_NAME = form_data.CUSTOM_NAME
     if form_data.CUSTOM_LOGO is not None:
         request.app.state.config.CUSTOM_LOGO = form_data.CUSTOM_LOGO
+    if form_data.ENABLE_SPLASH_SCREEN is not None:
+        request.app.state.config.ENABLE_SPLASH_SCREEN = form_data.ENABLE_SPLASH_SCREEN
     return {
         "CUSTOM_NAME": request.app.state.config.CUSTOM_NAME,
         "CUSTOM_LOGO": request.app.state.config.CUSTOM_LOGO,
+        "ENABLE_SPLASH_SCREEN": request.app.state.config.ENABLE_SPLASH_SCREEN,
     }
 
 

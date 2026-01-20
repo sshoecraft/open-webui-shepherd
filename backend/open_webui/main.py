@@ -390,6 +390,7 @@ from open_webui.config import (
     # Branding
     CUSTOM_NAME,
     CUSTOM_LOGO,
+    ENABLE_SPLASH_SCREEN,
     DEFAULT_ARENA_MODEL,
     MODEL_ORDER_LIST,
     EVALUATION_ARENA_MODELS,
@@ -793,6 +794,7 @@ app.state.config.ENABLE_TEMPORARY_CHAT = ENABLE_TEMPORARY_CHAT
 # Branding
 app.state.config.CUSTOM_NAME = CUSTOM_NAME
 app.state.config.CUSTOM_LOGO = CUSTOM_LOGO
+app.state.config.ENABLE_SPLASH_SCREEN = ENABLE_SPLASH_SCREEN
 app.state.config.MODEL_ORDER_LIST = MODEL_ORDER_LIST
 
 
@@ -1933,6 +1935,7 @@ async def get_app_config(request: Request):
         "name": display_name,
         "version": VERSION,
         "custom_logo": app.state.config.CUSTOM_LOGO if app.state.config.CUSTOM_LOGO else None,
+        "enable_splash_screen": app.state.config.ENABLE_SPLASH_SCREEN,
         "default_locale": str(DEFAULT_LOCALE),
         "oauth": {
             "providers": {

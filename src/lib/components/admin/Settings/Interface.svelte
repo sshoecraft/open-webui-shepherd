@@ -93,6 +93,7 @@
 	// Branding
 	let customName = '';
 	let customLogo = '';
+	let enableSplashScreen = true;
 	let logoFileInput: HTMLInputElement;
 
 	const handleLogoUpload = async (event: Event) => {
@@ -137,8 +138,11 @@
 		// Save branding config
 		await setBrandingConfig(localStorage.token, {
 			CUSTOM_NAME: customName,
-			CUSTOM_LOGO: customLogo
+			CUSTOM_LOGO: customLogo,
+			ENABLE_SPLASH_SCREEN: enableSplashScreen
 		});
+		// Cache splash screen setting for instant effect on page load
+		localStorage.setItem('enableSplashScreen', enableSplashScreen ? 'true' : 'false');
 
 		const backendConfig = await getBackendConfig();
 		await config.set(backendConfig);
@@ -169,6 +173,7 @@
 		const brandingConfig = await getBrandingConfig(localStorage.token);
 		customName = brandingConfig?.CUSTOM_NAME ?? '';
 		customLogo = brandingConfig?.CUSTOM_LOGO ?? '';
+		enableSplashScreen = brandingConfig?.ENABLE_SPLASH_SCREEN ?? true;
 
 		workspaceModels = await getBaseModels(localStorage.token);
 		baseModels = await getModels(localStorage.token, null, false);
@@ -691,6 +696,16 @@
 					</div>
 					<div class="text-xs text-gray-500 mt-1">
 						{$i18n.t('Recommended size: 44x44 pixels. Supports PNG, JPEG, SVG, WebP.')}
+					</div>
+				</div>
+
+				<div class="mb-2.5">
+					<div class="flex justify-between items-center">
+						<div class=" self-center text-xs">{$i18n.t('Enable Splash Screen')}</div>
+						<Switch bind:state={enableSplashScreen} />
+					</div>
+					<div class="text-xs text-gray-500 mt-1">
+						{$i18n.t('Show loading splash screen on page load')}
 					</div>
 				</div>
 			</div>
