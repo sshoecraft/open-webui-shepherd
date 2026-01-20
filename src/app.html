@@ -86,26 +86,37 @@
 				});
 				const isDarkMode = document.documentElement.classList.contains('dark');
 
-				const logo = document.createElement('img');
-				logo.id = 'logo';
-				logo.style =
-					'position: absolute; width: auto; height: 6rem; top: 44%; left: 50%; transform: translateX(-50%); display:block;';
+				// Check if splash screen is disabled via localStorage
+				const enableSplashScreen = localStorage.getItem('enableSplashScreen') !== 'false';
 
-				// Try custom branding logo first, fall back to default splash
-				const defaultSrc = isDarkMode ? '/static/splash-dark.png' : '/static/splash.png';
-				logo.src = '/api/v1/configs/branding/logo';
-				logo.onerror = function() {
-					logo.src = defaultSrc;
-				};
+				if (enableSplashScreen) {
+					const logo = document.createElement('img');
+					logo.id = 'logo';
+					logo.style =
+						'position: absolute; width: auto; height: 6rem; top: 44%; left: 50%; transform: translateX(-50%); display:block;';
 
-				document.addEventListener('DOMContentLoaded', function () {
-					const splash = document.getElementById('splash-screen');
-					if (document.documentElement.classList.contains('her')) {
-						return;
-					}
+					// Try custom branding logo first, fall back to default splash
+					const defaultSrc = isDarkMode ? '/static/splash-dark.png' : '/static/splash.png';
+					logo.src = '/api/v1/configs/branding/logo';
+					logo.onerror = function() {
+						logo.src = defaultSrc;
+					};
 
-					if (splash) splash.prepend(logo);
-				});
+					document.addEventListener('DOMContentLoaded', function () {
+						const splash = document.getElementById('splash-screen');
+						if (document.documentElement.classList.contains('her')) {
+							return;
+						}
+
+						if (splash) splash.prepend(logo);
+					});
+				} else {
+					// Hide splash screen immediately if disabled
+					document.addEventListener('DOMContentLoaded', function () {
+						const splash = document.getElementById('splash-screen');
+						if (splash) splash.style.display = 'none';
+					});
+				}
 			})();
 		</script>
 

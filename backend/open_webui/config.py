@@ -1204,6 +1204,12 @@ CUSTOM_LOGO = PersistentConfig(
     os.environ.get("CUSTOM_LOGO", ""),
 )
 
+ENABLE_SPLASH_SCREEN = PersistentConfig(
+    "ENABLE_SPLASH_SCREEN",
+    "ui.enable_splash_screen",
+    os.environ.get("ENABLE_SPLASH_SCREEN", "True").lower() == "true",
+)
+
 try:
     default_prompt_suggestions = json.loads(
         os.environ.get("DEFAULT_PROMPT_SUGGESTIONS", "[]")
