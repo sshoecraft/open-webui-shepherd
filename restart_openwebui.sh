@@ -6,7 +6,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PREFIX="${PREFIX:-$HOME/.open-webui}"
-OPENWEBUI_PORT="${OPENWEBUI_PORT:-8080}"
+OPENWEBUI_PORT="${OPENWEBUI_PORT:-5555}"
 
 echo "Restarting Open WebUI..."
 

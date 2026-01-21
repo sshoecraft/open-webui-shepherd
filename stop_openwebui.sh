@@ -3,7 +3,7 @@
 # Stop Open WebUI backend server
 
 PREFIX="${PREFIX:-$HOME/.open-webui}"
-OPENWEBUI_PORT="${OPENWEBUI_PORT:-8080}"
+OPENWEBUI_PORT="${OPENWEBUI_PORT:-5555}"
 
 echo "Stopping Open WebUI..."
 

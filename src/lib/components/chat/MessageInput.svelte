@@ -80,6 +80,7 @@
 	import Voice from '../icons/Voice.svelte';
 	import Terminal from '../icons/Terminal.svelte';
 	import IntegrationsMenu from './MessageInput/IntegrationsMenu.svelte';
+	import TokenCounter from './MessageInput/TokenCounter.svelte';
 	import Component from '../icons/Component.svelte';
 	import PlusAlt from '../icons/PlusAlt.svelte';
 
@@ -1540,6 +1541,8 @@
 											</div>
 										</IntegrationsMenu>
 									{/if}
+
+									<TokenCounter {history} {selectedModelIds} />
 
 									{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
 										<div class="ml-1 flex gap-1.5">
