@@ -71,8 +71,9 @@
 	}
 
 	function formatNumber(num: number): string {
-		if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-		if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+		// Use binary units (1024) since token counts follow computing conventions
+		if (num >= 1048576) return `${(num / 1048576).toFixed(1)}M`;
+		if (num >= 1024) return `${(num / 1024).toFixed(1)}K`;
 		return num.toString();
 	}
 </script>
