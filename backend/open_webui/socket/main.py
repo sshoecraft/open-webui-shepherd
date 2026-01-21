@@ -701,6 +701,10 @@ def get_event_emitter(request_info, update_db=True):
         user_id = request_info["user_id"]
         chat_id = request_info["chat_id"]
         message_id = request_info["message_id"]
+        session_id = request_info.get("session_id")
+
+        # Route to specific session if available, otherwise broadcast to all user sessions
+        target = session_id if session_id else f"user:{user_id}"
 
         await sio.emit(
             "events",
@@ -709,7 +713,7 @@ def get_event_emitter(request_info, update_db=True):
                 "message_id": message_id,
                 "data": event_data,
             },
-            room=f"user:{user_id}",
+            to=target,
         )
         if (
             update_db

@@ -3,7 +3,8 @@
 # Start Open WebUI backend server
 
 PREFIX="${PREFIX:-$HOME/.open-webui}"
-OPENWEBUI_PORT="${OPENWEBUI_PORT:-8080}"
+OPENWEBUI_PORT="${OPENWEBUI_PORT:-5555}"
+OPENWEBUI_HOST="${OPENWEBUI_HOST:-0.0.0.0}"
 VENV_PATH="${VENV_PATH:-$HOME/venvs/open-webui}"
 
 # Get the directory where this script is located
@@ -25,7 +26,7 @@ source "$VENV_PATH/bin/activate"
 
 # Start server in background
 python3 -m uvicorn open_webui.main:app \
-    --host 127.0.0.1 \
+    --host "$OPENWEBUI_HOST" \
     --port "$OPENWEBUI_PORT" \
     --forwarded-allow-ips '*' \
     > "$PREFIX/logs/openwebui.log" 2>&1 &
