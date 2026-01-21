@@ -69,9 +69,11 @@ async def generate_task_completion_direct(url: str, payload: dict) -> dict:
                                 break
                             try:
                                 chunk = json_module.loads(data)
-                                delta = chunk.get("choices", [{}])[0].get("delta", {})
-                                if "content" in delta:
-                                    content += delta["content"]
+                                choices = chunk.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    if "content" in delta:
+                                        content += delta["content"]
                             except json_module.JSONDecodeError:
                                 continue
 
