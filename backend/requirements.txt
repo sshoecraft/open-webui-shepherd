@@ -98,6 +98,7 @@ ddgs==9.10.0
 
 azure-ai-documentintelligence==1.0.2
 azure-identity==1.25.1
+azure-keyvault-secrets==4.9.0
 azure-storage-blob==12.27.1
 azure-search-documents==11.6.0
 
