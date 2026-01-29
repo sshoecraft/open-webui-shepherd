@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2-shepherd.1] - 2026-01-29
+
+Shepherd fork based on upstream Open WebUI 0.7.2.
+
+### Added
+
+- External secret resolution for DATABASE_URL - supports Azure Key Vault (via MSI) and HashiCorp Vault (via Unix socket) for secure credential management without storing secrets in environment variables
+- Custom branding feature for app name and logo
+- Option to disable splash screen
+- Token counter display with session-scoped event routing
+- Corporate lockdown controls and UI improvements
+- Shepherd tool server integration and context overflow handling
+- OpenWebUI start/stop/restart scripts
+
+### Fixed
+
+- List index out of range error in task completion streaming
+- Token counter to use binary units (1024) instead of decimal
+
+---
+
 ## [0.7.2] - 2026-01-10
 
 ### Fixed
