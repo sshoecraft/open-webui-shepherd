@@ -38,6 +38,9 @@ try:
 except ImportError:
     print("dotenv not installed, skipping...")
 
+# Secret resolution for vault-backed configuration
+from open_webui.utils.secrets import resolve_secret, SecretResolutionError
+
 DOCKER = os.environ.get("DOCKER", "False").lower() == "true"
 
 # device type embedding models - "cpu" (default), "cuda" (nvidia gpu required) or "mps" (apple silicon) - choosing this right can lead to better performance
@@ -285,6 +288,16 @@ elif DATABASE_TYPE == "sqlite+sqlcipher" and not os.environ.get("DATABASE_URL"):
 # Replace the postgres:// with postgresql://
 if "postgres://" in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
+
+# Resolve DATABASE_URL from external secret store if applicable
+try:
+    _resolved_url = resolve_secret(DATABASE_URL)
+    if _resolved_url != DATABASE_URL:
+        log.info("DATABASE_URL resolved from external secret store")
+        DATABASE_URL = _resolved_url
+except SecretResolutionError as e:
+    log.error(f"Failed to resolve DATABASE_URL: {e}")
+    raise SystemExit(f"Cannot start: DATABASE_URL secret resolution failed: {e}")
 
 DATABASE_SCHEMA = os.environ.get("DATABASE_SCHEMA", None)
 
