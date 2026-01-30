@@ -1672,12 +1672,12 @@ async def chat_completion(
                 "stream_delta_chunk_size": stream_delta_chunk_size,
                 "reasoning_tags": reasoning_tags,
                 "function_calling": (
-                    "native"
+                    "default"
                     if (
-                        form_data.get("params", {}).get("function_calling") == "native"
-                        or model_info_params.get("function_calling") == "native"
+                        form_data.get("params", {}).get("function_calling") == "default"
+                        or model_info_params.get("function_calling") == "default"
                     )
-                    else "default"
+                    else "native"
                 ),
             },
         }
