@@ -229,7 +229,7 @@
 							</div>
 
 							<div class="flex flex-col w-full mt-1">
-								<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Email')} <span class="text-gray-400">({$i18n.t('optional')})</span></div>
+								<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Email')}</div>
 
 								<div class="flex-1">
 									<input
@@ -237,6 +237,7 @@
 										type="email"
 										bind:value={_user.email}
 										placeholder={$i18n.t('Enter Your Email')}
+									required
 									/>
 								</div>
 							</div>

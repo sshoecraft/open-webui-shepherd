@@ -304,7 +304,7 @@ export const userSignUp = async (
 		body: JSON.stringify({
 			name: name,
 			username: username,
-			...(email ? { email: email } : {}),
+			email: email,
 			password: password,
 			profile_image_url: profile_image_url
 		})
@@ -374,7 +374,7 @@ export const addUser = async (
 		body: JSON.stringify({
 			name: name,
 			username: username,
-			...(email ? { email: email } : {}),
+			email: email,
 			password: password,
 			role: role,
 			...(profile_image_url && { profile_image_url: profile_image_url })

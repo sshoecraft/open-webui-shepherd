@@ -333,7 +333,7 @@
 											{#if mode === 'signup'}
 												<div class="mb-2">
 													<label for="email" class="text-sm font-medium text-left mb-1 block"
-														>{$i18n.t('Email')} <span class="text-gray-400 text-xs">({$i18n.t('optional')})</span></label
+														>{$i18n.t('Email')}</label
 													>
 													<input
 														bind:value={email}
@@ -343,6 +343,7 @@
 														autocomplete="email"
 														name="email"
 														placeholder={$i18n.t('Enter Your Email')}
+													required
 													/>
 												</div>
 											{/if}

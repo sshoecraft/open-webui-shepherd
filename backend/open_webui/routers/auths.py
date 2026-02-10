@@ -739,15 +739,13 @@ async def signup(
     if Users.get_user_by_username(form_data.username.lower(), db=db):
         raise HTTPException(400, detail=ERROR_MESSAGES.USERNAME_TAKEN)
 
-    email = form_data.email.lower() if form_data.email else f"{form_data.username.lower()}@localhost"
+    if not validate_email_format(form_data.email.lower()):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
+        )
 
-    if form_data.email:
-        if not validate_email_format(email):
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
-            )
-        if Users.get_user_by_email(email, db=db):
-            raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
+    if Users.get_user_by_email(form_data.email.lower(), db=db):
+        raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
 
     try:
         try:
@@ -759,7 +757,7 @@ async def signup(
 
         role = "admin" if not has_users else request.app.state.config.DEFAULT_USER_ROLE
         user = Auths.insert_new_auth(
-            email,
+            form_data.email.lower(),
             hashed,
             form_data.name,
             username=form_data.username.lower(),
@@ -940,15 +938,13 @@ async def add_user(
     if Users.get_user_by_username(form_data.username.lower(), db=db):
         raise HTTPException(400, detail=ERROR_MESSAGES.USERNAME_TAKEN)
 
-    email = form_data.email.lower() if form_data.email else f"{form_data.username.lower()}@localhost"
+    if not validate_email_format(form_data.email.lower()):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
+        )
 
-    if form_data.email:
-        if not validate_email_format(email):
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
-            )
-        if Users.get_user_by_email(email, db=db):
-            raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
+    if Users.get_user_by_email(form_data.email.lower(), db=db):
+        raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
 
     try:
         try:
@@ -958,7 +954,7 @@ async def add_user(
 
         hashed = get_password_hash(form_data.password)
         user = Auths.insert_new_auth(
-            email,
+            form_data.email.lower(),
             hashed,
             form_data.name,
             username=form_data.username.lower(),
