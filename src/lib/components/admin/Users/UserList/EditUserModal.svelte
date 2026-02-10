@@ -38,6 +38,7 @@
 		profile_image_url: '',
 		role: 'pending',
 		name: '',
+		username: '',
 		email: '',
 		password: ''
 	};
@@ -166,7 +167,22 @@
 									</div>
 
 									<div class="flex flex-col w-full">
-										<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Email')}</div>
+										<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Username')}</div>
+
+										<div class="flex-1">
+											<input
+												class="w-full text-sm bg-transparent disabled:text-gray-500 dark:disabled:text-gray-500 outline-hidden"
+												type="text"
+												bind:value={_user.username}
+												placeholder={$i18n.t('Enter Username')}
+												autocomplete="off"
+												required
+											/>
+										</div>
+									</div>
+
+									<div class="flex flex-col w-full">
+										<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Email')} <span class="text-gray-400">({$i18n.t('optional')})</span></div>
 
 										<div class="flex-1">
 											<input
@@ -175,7 +191,6 @@
 												bind:value={_user.email}
 												placeholder={$i18n.t('Enter Your Email')}
 												autocomplete="off"
-												required
 											/>
 										</div>
 									</div>

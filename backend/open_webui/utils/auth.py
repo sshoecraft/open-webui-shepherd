@@ -426,7 +426,7 @@ def get_admin_user(user=Depends(get_current_user)):
     return user
 
 
-def create_admin_user(email: str, password: str, name: str = "Admin"):
+def create_admin_user(email: str, password: str, name: str = "Admin", username: str = ""):
     """
     Create an admin user from environment variables.
     Used for headless/automated deployments.
@@ -440,6 +440,10 @@ def create_admin_user(email: str, password: str, name: str = "Admin"):
         log.debug("Users already exist, skipping admin creation")
         return None
 
+    # Derive username from email if not provided
+    if not username:
+        username = email.split("@")[0].lower()
+
     log.info(f"Creating admin account from environment variables: {email}")
     try:
         hashed = get_password_hash(password)
@@ -447,6 +451,7 @@ def create_admin_user(email: str, password: str, name: str = "Admin"):
             email=email.lower(),
             password=hashed,
             name=name,
+            username=username,
             role="admin",
         )
         if user:

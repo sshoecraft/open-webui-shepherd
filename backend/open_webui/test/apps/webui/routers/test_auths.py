@@ -32,6 +32,7 @@ class TestAuths(AbstractPostgresTest):
             email="john.doe@openwebui.com",
             password=get_password_hash("old_password"),
             name="John Doe",
+            username="john.doe",
             profile_image_url="/user.png",
             role="user",
         )
@@ -53,6 +54,7 @@ class TestAuths(AbstractPostgresTest):
             email="john.doe@openwebui.com",
             password=get_password_hash("old_password"),
             name="John Doe",
+            username="john.doe",
             profile_image_url="/user.png",
             role="user",
         )
@@ -65,11 +67,11 @@ class TestAuths(AbstractPostgresTest):
         assert response.status_code == 200
 
         old_auth = self.auths.authenticate_user(
-            "john.doe@openwebui.com", "old_password"
+            "john.doe", lambda pw: False
         )
         assert old_auth is None
         new_auth = self.auths.authenticate_user(
-            "john.doe@openwebui.com", "new_password"
+            "john.doe", lambda pw: True
         )
         assert new_auth is not None
 
@@ -80,12 +82,13 @@ class TestAuths(AbstractPostgresTest):
             email="john.doe@openwebui.com",
             password=get_password_hash("password"),
             name="John Doe",
+            username="john.doe",
             profile_image_url="/user.png",
             role="user",
         )
         response = self.fast_api_client.post(
             self.create_url("/signin"),
-            json={"email": "john.doe@openwebui.com", "password": "password"},
+            json={"username": "john.doe", "password": "password"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -102,6 +105,7 @@ class TestAuths(AbstractPostgresTest):
             self.create_url("/signup"),
             json={
                 "name": "John Doe",
+                "username": "john.doe",
                 "email": "john.doe@openwebui.com",
                 "password": "password",
             },
@@ -122,6 +126,7 @@ class TestAuths(AbstractPostgresTest):
                 self.create_url("/add"),
                 json={
                     "name": "John Doe 2",
+                    "username": "john.doe2",
                     "email": "john.doe2@openwebui.com",
                     "password": "password2",
                     "role": "admin",
@@ -142,6 +147,7 @@ class TestAuths(AbstractPostgresTest):
             email="john.doe@openwebui.com",
             password="password",
             name="John Doe",
+            username="john.doe",
             profile_image_url="/user.png",
             role="admin",
         )
@@ -159,6 +165,7 @@ class TestAuths(AbstractPostgresTest):
             email="john.doe@openwebui.com",
             password="password",
             name="John Doe",
+            username="john.doe",
             profile_image_url="/user.png",
             role="admin",
         )
@@ -174,6 +181,7 @@ class TestAuths(AbstractPostgresTest):
             email="john.doe@openwebui.com",
             password="password",
             name="John Doe",
+            username="john.doe",
             profile_image_url="/user.png",
             role="admin",
         )
@@ -190,6 +198,7 @@ class TestAuths(AbstractPostgresTest):
             email="john.doe@openwebui.com",
             password="password",
             name="John Doe",
+            username="john.doe",
             profile_image_url="/user.png",
             role="admin",
         )

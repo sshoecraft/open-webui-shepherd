@@ -1583,12 +1583,25 @@ class OAuthManager:
                         log.warning("Username claim is missing, using email as name")
                         name = email
 
+                    # Derive username from email for OAuth users
+                    oauth_username = email.split("@")[0].lower() if email and "@" in email else (email or "").lower()
+                    import re as re_oauth
+                    oauth_username = re_oauth.sub(r"[^a-zA-Z0-9._-]", "", oauth_username)
+                    if len(oauth_username) < 3:
+                        oauth_username = oauth_username + "user"
+                    base_oauth_username = oauth_username
+                    counter = 1
+                    while Users.get_user_by_username(oauth_username, db=db):
+                        oauth_username = f"{base_oauth_username}{counter}"
+                        counter += 1
+
                     user = Auths.insert_new_auth(
                         email=email,
                         password=get_password_hash(
                             str(uuid.uuid4())
                         ),  # Random password, not used
                         name=name,
+                        username=oauth_username,
                         profile_image_url=picture_url,
                         role=self.get_user_role(None, user_data),
                         oauth=oauth_data,

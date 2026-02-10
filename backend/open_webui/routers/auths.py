@@ -48,7 +48,7 @@ from open_webui.config import (
 )
 from pydantic import BaseModel
 
-from open_webui.utils.misc import parse_duration, validate_email_format
+from open_webui.utils.misc import parse_duration, validate_email_format, validate_username_format
 from open_webui.utils.auth import (
     validate_password,
     verify_password,
@@ -456,6 +456,7 @@ async def ldap_auth(
                         email=email,
                         password=str(uuid.uuid4()),
                         name=cn,
+                        username=form_data.user.lower(),
                         role=role,
                         db=db,
                     )
@@ -571,6 +572,7 @@ async def signin(
 
         email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
         name = email
+        trusted_username = email.split("@")[0].lower()
 
         if WEBUI_AUTH_TRUSTED_NAME_HEADER:
             name = request.headers.get(WEBUI_AUTH_TRUSTED_NAME_HEADER, email)
@@ -580,10 +582,17 @@ async def signin(
                 pass
 
         if not Users.get_user_by_email(email.lower(), db=db):
+            # Ensure unique username for auto-created trusted header users
+            base_username = trusted_username
+            counter = 1
+            while Users.get_user_by_username(trusted_username, db=db):
+                trusted_username = f"{base_username}{counter}"
+                counter += 1
+
             await signup(
                 request,
                 response,
-                SignupForm(email=email, password=str(uuid.uuid4()), name=name),
+                SignupForm(username=trusted_username, email=email, password=str(uuid.uuid4()), name=name),
                 db=db,
             )
 
@@ -600,10 +609,11 @@ async def signin(
     elif WEBUI_AUTH == False:
         admin_email = "admin@localhost"
         admin_password = "admin"
+        admin_username = "admin"
 
         if Users.get_user_by_email(admin_email.lower(), db=db):
             user = Auths.authenticate_user(
-                admin_email.lower(),
+                admin_username,
                 lambda pw: verify_password(admin_password, pw),
                 db=db,
             )
@@ -614,17 +624,17 @@ async def signin(
             await signup(
                 request,
                 response,
-                SignupForm(email=admin_email, password=admin_password, name="User"),
+                SignupForm(username=admin_username, email=admin_email, password=admin_password, name="User"),
                 db=db,
             )
 
             user = Auths.authenticate_user(
-                admin_email.lower(),
+                admin_username,
                 lambda pw: verify_password(admin_password, pw),
                 db=db,
             )
     else:
-        if signin_rate_limiter.is_limited(form_data.email.lower()):
+        if signin_rate_limiter.is_limited(form_data.username.lower()):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
@@ -640,7 +650,7 @@ async def signin(
             form_data.password = password_bytes.decode("utf-8", errors="ignore")
 
         user = Auths.authenticate_user(
-            form_data.email.lower(),
+            form_data.username.lower(),
             lambda pw: verify_password(form_data.password, pw),
             db=db,
         )
@@ -721,13 +731,23 @@ async def signup(
                 status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED
             )
 
-    if not validate_email_format(form_data.email.lower()):
+    if not validate_username_format(form_data.username.lower()):
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
+            status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_USERNAME_FORMAT
         )
 
-    if Users.get_user_by_email(form_data.email.lower(), db=db):
-        raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
+    if Users.get_user_by_username(form_data.username.lower(), db=db):
+        raise HTTPException(400, detail=ERROR_MESSAGES.USERNAME_TAKEN)
+
+    email = form_data.email.lower() if form_data.email else f"{form_data.username.lower()}@localhost"
+
+    if form_data.email:
+        if not validate_email_format(email):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
+            )
+        if Users.get_user_by_email(email, db=db):
+            raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
 
     try:
         try:
@@ -739,11 +759,12 @@ async def signup(
 
         role = "admin" if not has_users else request.app.state.config.DEFAULT_USER_ROLE
         user = Auths.insert_new_auth(
-            form_data.email.lower(),
+            email,
             hashed,
             form_data.name,
-            form_data.profile_image_url,
-            role,
+            username=form_data.username.lower(),
+            profile_image_url=form_data.profile_image_url,
+            role=role,
             db=db,
         )
 
@@ -911,13 +932,23 @@ async def add_user(
     user=Depends(get_admin_user),
     db: Session = Depends(get_session),
 ):
-    if not validate_email_format(form_data.email.lower()):
+    if not validate_username_format(form_data.username.lower()):
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
+            status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_USERNAME_FORMAT
         )
 
-    if Users.get_user_by_email(form_data.email.lower(), db=db):
-        raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
+    if Users.get_user_by_username(form_data.username.lower(), db=db):
+        raise HTTPException(400, detail=ERROR_MESSAGES.USERNAME_TAKEN)
+
+    email = form_data.email.lower() if form_data.email else f"{form_data.username.lower()}@localhost"
+
+    if form_data.email:
+        if not validate_email_format(email):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
+            )
+        if Users.get_user_by_email(email, db=db):
+            raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
 
     try:
         try:
@@ -927,11 +958,12 @@ async def add_user(
 
         hashed = get_password_hash(form_data.password)
         user = Auths.insert_new_auth(
-            form_data.email.lower(),
+            email,
             hashed,
             form_data.name,
-            form_data.profile_image_url,
-            form_data.role,
+            username=form_data.username.lower(),
+            profile_image_url=form_data.profile_image_url,
+            role=form_data.role,
             db=db,
         )
 

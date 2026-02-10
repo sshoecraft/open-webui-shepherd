@@ -80,7 +80,7 @@ class UserModel(BaseModel):
     id: str
 
     email: str
-    username: Optional[str] = None
+    username: str = ""
     role: str = "pending"
 
     name: str
@@ -241,6 +241,7 @@ class UsersTable:
         id: str,
         name: str,
         email: str,
+        username: str = "",
         profile_image_url: str = "/user.png",
         role: str = "pending",
         oauth: Optional[dict] = None,
@@ -251,6 +252,7 @@ class UsersTable:
                 **{
                     "id": id,
                     "email": email,
+                    "username": username,
                     "name": name,
                     "role": role,
                     "profile_image_url": profile_image_url,
@@ -301,6 +303,16 @@ class UsersTable:
             with get_db_context(db) as db:
                 user = db.query(User).filter_by(email=email).first()
                 return UserModel.model_validate(user)
+        except Exception:
+            return None
+
+    def get_user_by_username(
+        self, username: str, db: Optional[Session] = None
+    ) -> Optional[UserModel]:
+        try:
+            with get_db_context(db) as db:
+                user = db.query(User).filter_by(username=username).first()
+                return UserModel.model_validate(user) if user else None
         except Exception:
             return None
 

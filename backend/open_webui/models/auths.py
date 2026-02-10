@@ -50,7 +50,7 @@ class SigninResponse(Token, UserProfileImageResponse):
 
 
 class SigninForm(BaseModel):
-    email: str
+    username: str
     password: str
 
 
@@ -70,7 +70,8 @@ class UpdatePasswordForm(BaseModel):
 
 class SignupForm(BaseModel):
     name: str
-    email: str
+    username: str
+    email: Optional[str] = None
     password: str
     profile_image_url: Optional[str] = "/user.png"
 
@@ -85,6 +86,7 @@ class AuthsTable:
         email: str,
         password: str,
         name: str,
+        username: str = "",
         profile_image_url: str = "/user.png",
         role: str = "pending",
         oauth: Optional[dict] = None,
@@ -102,7 +104,8 @@ class AuthsTable:
             db.add(result)
 
             user = Users.insert_new_user(
-                id, name, email, profile_image_url, role, oauth=oauth, db=db
+                id, name, email, username=username, profile_image_url=profile_image_url,
+                role=role, oauth=oauth, db=db
             )
 
             db.commit()
@@ -114,11 +117,11 @@ class AuthsTable:
                 return None
 
     def authenticate_user(
-        self, email: str, verify_password: callable, db: Optional[Session] = None
+        self, username: str, verify_password: callable, db: Optional[Session] = None
     ) -> Optional[UserModel]:
-        log.info(f"authenticate_user: {email}")
+        log.info(f"authenticate_user: {username}")
 
-        user = Users.get_user_by_email(email, db=db)
+        user = Users.get_user_by_username(username, db=db)
         if not user:
             return None
 

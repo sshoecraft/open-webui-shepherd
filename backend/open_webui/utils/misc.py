@@ -360,6 +360,12 @@ def validate_email_format(email: str) -> bool:
     return bool(re.match(r"[^@]+@[^@]+\.[^@]+", email))
 
 
+def validate_username_format(username: str) -> bool:
+    if not username:
+        return False
+    return bool(re.match(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{2,49}$", username))
+
+
 def sanitize_filename(file_name):
     # Convert to lowercase
     lower_case_file_name = file_name.lower()

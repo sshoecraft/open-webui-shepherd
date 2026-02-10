@@ -23,6 +23,7 @@
 
 	let _user = {
 		name: '',
+		username: '',
 		email: '',
 		password: '',
 		role: 'user'
@@ -31,6 +32,7 @@
 	$: if (show) {
 		_user = {
 			name: '',
+			username: '',
 			email: '',
 			password: '',
 			role: 'user'
@@ -49,6 +51,7 @@
 			const res = await addUser(
 				localStorage.token,
 				_user.name,
+				_user.username,
 				_user.email,
 				_user.password,
 				_user.role,
@@ -80,15 +83,16 @@
 
 						if (idx > 0) {
 							if (
-								columns.length === 4 &&
-								['admin', 'user', 'pending'].includes(columns[3].toLowerCase())
+								columns.length === 5 &&
+								['admin', 'user', 'pending'].includes(columns[4].toLowerCase())
 							) {
 								const res = await addUser(
 									localStorage.token,
 									columns[0],
 									columns[1],
 									columns[2],
-									columns[3].toLowerCase(),
+									columns[3],
+									columns[4].toLowerCase(),
 									generateInitialsImage(columns[0])
 								).catch((error) => {
 									toast.error(`Row ${idx + 1}: ${error}`);
@@ -210,7 +214,22 @@
 							<hr class=" border-gray-100/30 dark:border-gray-850/30 my-2.5 w-full" />
 
 							<div class="flex flex-col w-full">
-								<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Email')}</div>
+								<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Username')}</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent disabled:text-gray-500 dark:disabled:text-gray-500 outline-hidden"
+										type="text"
+										bind:value={_user.username}
+										placeholder={$i18n.t('Choose a Username')}
+										autocomplete="off"
+										required
+									/>
+								</div>
+							</div>
+
+							<div class="flex flex-col w-full mt-1">
+								<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Email')} <span class="text-gray-400">({$i18n.t('optional')})</span></div>
 
 								<div class="flex-1">
 									<input
@@ -218,7 +237,6 @@
 										type="email"
 										bind:value={_user.email}
 										placeholder={$i18n.t('Enter Your Email')}
-										required
 									/>
 								</div>
 							</div>
@@ -265,7 +283,7 @@
 
 								<div class=" text-xs text-gray-500">
 									ⓘ {$i18n.t(
-										'Ensure your CSV file includes 4 columns in this order: Name, Email, Password, Role.'
+										'Ensure your CSV file includes 5 columns in this order: Name, Username, Email, Password, Role.'
 									)}
 									<a
 										class="underline dark:text-gray-200"

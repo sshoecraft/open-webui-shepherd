@@ -43,8 +43,9 @@ class ERROR_MESSAGES(str, Enum):
     INVALID_TOKEN = (
         "Your session has expired or the token is invalid. Please sign in again."
     )
-    INVALID_CRED = "The email or password provided is incorrect. Please check for typos and try logging in again."
+    INVALID_CRED = "The username or password provided is incorrect. Please check for typos and try logging in again."
     INVALID_EMAIL_FORMAT = "The email format you entered is invalid. Please double-check and make sure you're using a valid email address (e.g., yourname@example.com)."
+    INVALID_USERNAME_FORMAT = "The username format is invalid. Usernames must be 3-50 characters and contain only letters, numbers, hyphens, underscores, or periods."
     INCORRECT_PASSWORD = (
         "The password provided is incorrect. Please check for typos and try again."
     )
