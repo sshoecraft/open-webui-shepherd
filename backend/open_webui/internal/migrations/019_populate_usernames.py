@@ -20,6 +20,21 @@ def migrate(migrator: Migrator, database: pw.Database, *, fake=False):
     if fake:
         return
 
+    # Ensure columns exist (may not if Alembic hasn't run yet)
+    # Works with both SQLite and PostgreSQL
+    for col_name, col_type in [
+        ("username", "VARCHAR(50)"),
+        ("bio", "TEXT"),
+        ("gender", "TEXT"),
+        ("date_of_birth", "DATE"),
+    ]:
+        try:
+            database.execute_sql(
+                f"ALTER TABLE \"user\" ADD COLUMN {col_name} {col_type}"
+            )
+        except Exception:
+            pass
+
     # Get all users without a username
     cursor = database.execute_sql(
         "SELECT id, email FROM \"user\" WHERE username IS NULL OR username = ''"
