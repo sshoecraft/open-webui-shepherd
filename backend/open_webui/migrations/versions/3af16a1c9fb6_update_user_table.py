@@ -18,11 +18,32 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def column_exists(table, column):
+    conn = op.get_bind()
+    result = conn.execute(sa.text(
+        "SELECT 1 FROM pragma_table_info(:table) WHERE name = :column"
+    ), {"table": table, "column": column})
+    if result.fetchone():
+        return True
+    # Fallback for PostgreSQL
+    try:
+        result = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.columns WHERE table_name = :table AND column_name = :column"
+        ), {"table": table, "column": column})
+        return result.fetchone() is not None
+    except Exception:
+        return False
+
+
 def upgrade() -> None:
-    op.add_column("user", sa.Column("username", sa.String(length=50), nullable=True))
-    op.add_column("user", sa.Column("bio", sa.Text(), nullable=True))
-    op.add_column("user", sa.Column("gender", sa.Text(), nullable=True))
-    op.add_column("user", sa.Column("date_of_birth", sa.Date(), nullable=True))
+    for col_name, col_type in [
+        ("username", sa.String(length=50)),
+        ("bio", sa.Text()),
+        ("gender", sa.Text()),
+        ("date_of_birth", sa.Date()),
+    ]:
+        if not column_exists("user", col_name):
+            op.add_column("user", sa.Column(col_name, col_type, nullable=True))
 
 
 def downgrade() -> None:
