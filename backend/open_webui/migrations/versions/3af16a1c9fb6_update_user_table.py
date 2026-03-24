@@ -20,19 +20,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def column_exists(table, column):
     conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT 1 FROM pragma_table_info(:table) WHERE name = :column"
-    ), {"table": table, "column": column})
-    if result.fetchone():
-        return True
-    # Fallback for PostgreSQL
-    try:
+    if conn.dialect.name == "sqlite":
+        result = conn.execute(sa.text(
+            "SELECT 1 FROM pragma_table_info(:table) WHERE name = :column"
+        ), {"table": table, "column": column})
+    else:
         result = conn.execute(sa.text(
             "SELECT 1 FROM information_schema.columns WHERE table_name = :table AND column_name = :column"
         ), {"table": table, "column": column})
-        return result.fetchone() is not None
-    except Exception:
-        return False
+    return result.fetchone() is not None
 
 
 def upgrade() -> None:
