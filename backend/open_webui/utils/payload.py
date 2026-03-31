@@ -105,6 +105,10 @@ def apply_model_params_to_body_openai(params: dict, form_data: dict) -> dict:
         # If there are custom parameters, we need to apply them first
         params = deep_update(params, custom_params)
 
+    # Default: disable server-side tool use unless explicitly enabled
+    if "use_tools" not in params:
+        params["use_tools"] = False
+
     mappings = {
         "temperature": float,
         "top_p": float,
@@ -117,6 +121,7 @@ def apply_model_params_to_body_openai(params: dict, form_data: dict) -> dict:
         "stop": lambda x: [bytes(s, "utf-8").decode("unicode_escape") for s in x],
         "logit_bias": lambda x: x,
         "response_format": dict,
+        "use_tools": bool,
     }
     return apply_model_params_to_body(params, form_data, mappings)
 
