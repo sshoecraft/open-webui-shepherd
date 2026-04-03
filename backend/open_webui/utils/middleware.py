@@ -1957,6 +1957,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 tools_dict[name] = tool_dict
 
     if tools_dict:
+        log.info(f"=== tools_dict has {len(tools_dict)} tools, function_calling={metadata.get('params', {}).get('function_calling')} ===")
         if metadata.get("params", {}).get("function_calling") == "native":
             # If the function calling is native, then call the tools function calling handler
             metadata["tools"] = tools_dict
@@ -1964,6 +1965,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 {"type": "function", "function": tool.get("spec", {})}
                 for tool in tools_dict.values()
             ]
+            log.info(f"=== Native mode: added {len(form_data['tools'])} tools to form_data ===")
 
         else:
             # If the function calling is not native, then call the tools function calling handler

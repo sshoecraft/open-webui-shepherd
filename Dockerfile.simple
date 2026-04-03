@@ -1,0 +1,57 @@
+# Open WebUI Shepherd - Simplified Docker image
+# Uses pre-built frontend, minimal dependencies
+
+FROM python:3.11-slim-bookworm
+
+# Environment settings
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=5555 \
+    HOST=0.0.0.0 \
+    ENV=prod \
+    USE_SLIM_DOCKER=true \
+    SCARF_NO_ANALYTICS=true \
+    DO_NOT_TRACK=true \
+    ANONYMIZED_TELEMETRY=false \
+    DOCKER=true
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    pandoc \
+    gcc \
+    curl \
+    jq \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN pip3 install --no-cache-dir uv && \
+    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir && \
+    cd /app/backend && uv pip install --system -r requirements.txt --no-cache-dir
+
+# Copy pre-built frontend
+COPY build /app/build
+COPY package.json /app/package.json
+COPY CHANGELOG.md /app/CHANGELOG.md
+
+# Copy backend
+COPY backend /app/backend
+
+# Create data directory
+RUN mkdir -p /app/backend/data
+
+WORKDIR /app/backend
+
+EXPOSE 5555
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
+    CMD curl --silent --fail http://localhost:5555/health | jq -ne 'input.status == true' || exit 1
+
+CMD ["python3", "-m", "uvicorn", "open_webui.main:app", "--host", "0.0.0.0", "--port", "5555", "--forwarded-allow-ips", "*"]

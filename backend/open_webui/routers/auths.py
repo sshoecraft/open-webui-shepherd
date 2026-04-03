@@ -328,6 +328,7 @@ async def ldap_auth(
             f"{LDAP_ATTRIBUTE_FOR_USERNAME}",
             f"{LDAP_ATTRIBUTE_FOR_MAIL}",
             "cn",
+            "displayName",
         ]
         if ENABLE_LDAP_GROUP_MANAGEMENT:
             search_attributes.append(f"{LDAP_ATTRIBUTE_FOR_GROUPS}")
@@ -366,7 +367,11 @@ async def ldap_auth(
         else:
             email = str(email).lower()
 
-        cn = str(entry["cn"])  # common name
+        display_name = str(entry["displayName"]) if "displayName" in entry and entry["displayName"].value else str(entry["cn"])
+        if "," in display_name:
+            cn = display_name.split(",", 1)[1].strip().split()[0]
+        else:
+            cn = display_name.split()[0]
         user_dn = entry.entry_dn  # user distinguished name
 
         user_groups = []
