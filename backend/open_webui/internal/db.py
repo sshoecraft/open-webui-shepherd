@@ -143,6 +143,14 @@ else:
     else:
         engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
 
+    if DATABASE_SCHEMA:
+        def set_search_path(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute(f"SET search_path TO {DATABASE_SCHEMA}")
+            cursor.close()
+
+        event.listen(engine, "connect", set_search_path)
+
 
 SessionLocal = sessionmaker(
     autocommit=False, autoflush=False, bind=engine, expire_on_commit=False
