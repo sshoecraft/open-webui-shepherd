@@ -969,6 +969,10 @@ async def generate_chat_completion(
                     else:
                         log.info(f"Pre-filter: no messages matched evicted IDs")
 
+    # Default: disable server-side tool use unless explicitly enabled in payload
+    if "use_tools" not in payload:
+        payload["use_tools"] = False
+
     # Retry loop for context overflow handling
     # Keep payload as dict for potential message eviction
     original_messages = payload.get("messages", []).copy()
