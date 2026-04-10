@@ -969,7 +969,7 @@ async def generate_chat_completion(
                     else:
                         log.info(f"Pre-filter: no messages matched evicted IDs")
 
-    # Default: disable server-side tool use unless explicitly enabled in payload
+    # Default: disable server-side tool use so OpenWebUI handles tool execution
     if "use_tools" not in payload:
         payload["use_tools"] = False
 

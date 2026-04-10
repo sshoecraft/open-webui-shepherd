@@ -2265,6 +2265,7 @@ async def process_chat_response(
         event_caller = get_event_call(metadata)
 
     # Non-streaming response
+    log.info(f"=== process_chat_response: response type={type(response).__name__}, is_streaming={isinstance(response, StreamingResponse)} ===")
     if not isinstance(response, StreamingResponse):
         if event_emitter:
             try:
@@ -2320,6 +2321,162 @@ async def process_chat_response(
                         )
 
                     choices = response_data.get("choices", [])
+
+                    # Handle tool_calls in non-streaming responses
+                    tool_calls_in_response = (
+                        choices[0].get("message", {}).get("tool_calls", [])
+                        if choices
+                        else []
+                    )
+
+                    if tool_calls_in_response:
+                        log.info(f"=== Non-streaming: got {len(tool_calls_in_response)} tool_calls ===")
+                        tools = metadata.get("tools", {})
+                        messages = form_data.get("messages", [])
+                        tool_call_retries = 0
+
+                        while (
+                            tool_calls_in_response
+                            and tool_call_retries < CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES
+                        ):
+                            tool_call_retries += 1
+
+                            # Build assistant message with tool_calls
+                            assistant_msg = {
+                                "role": "assistant",
+                                "content": choices[0].get("message", {}).get("content") or "",
+                                "tool_calls": tool_calls_in_response,
+                            }
+                            messages = [*messages, assistant_msg]
+
+                            # Execute each tool call
+                            for tool_call in tool_calls_in_response:
+                                tool_call_id = tool_call.get("id", "")
+                                tool_function_name = tool_call.get("function", {}).get("name", "")
+                                tool_args = tool_call.get("function", {}).get("arguments", "{}")
+
+                                tool_function_params = {}
+                                try:
+                                    tool_function_params = ast.literal_eval(tool_args)
+                                except Exception:
+                                    try:
+                                        tool_function_params = json.loads(tool_args)
+                                    except Exception:
+                                        log.error(f"Error parsing tool call arguments: {tool_args}")
+
+                                tool_result = None
+                                tool_type = None
+                                direct_tool = False
+
+                                if tool_function_name in tools:
+                                    tool = tools[tool_function_name]
+                                    spec = tool.get("spec", {})
+                                    tool_type = tool.get("type", "")
+                                    direct_tool = tool.get("direct", False)
+
+                                    try:
+                                        allowed_params = (
+                                            spec.get("parameters", {})
+                                            .get("properties", {})
+                                            .keys()
+                                        )
+                                        tool_function_params = {
+                                            k: v
+                                            for k, v in tool_function_params.items()
+                                            if k in allowed_params
+                                        }
+
+                                        if direct_tool:
+                                            tool_result = await event_caller(
+                                                {
+                                                    "type": "execute:tool",
+                                                    "data": {
+                                                        "id": str(uuid4()),
+                                                        "name": tool_function_name,
+                                                        "params": tool_function_params,
+                                                        "server": tool.get("server", {}),
+                                                        "session_id": metadata.get(
+                                                            "session_id", None
+                                                        ),
+                                                    },
+                                                }
+                                            )
+                                        else:
+                                            tool_function = get_updated_tool_function(
+                                                function=tool["callable"],
+                                                extra_params={
+                                                    "__messages__": messages,
+                                                    "__files__": metadata.get("files", []),
+                                                },
+                                            )
+                                            tool_result = await tool_function(
+                                                **tool_function_params
+                                            )
+                                    except Exception as e:
+                                        tool_result = str(e)
+                                else:
+                                    log.warning(f"Tool '{tool_function_name}' not found in metadata tools")
+                                    tool_result = f"Error: tool '{tool_function_name}' not found"
+
+                                tool_result, tool_result_files, tool_result_embeds = (
+                                    process_tool_result(
+                                        request,
+                                        tool_function_name,
+                                        tool_result,
+                                        tool_type,
+                                        direct_tool,
+                                        metadata,
+                                        user,
+                                    )
+                                )
+
+                                # Add tool result message
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_call_id,
+                                        "content": tool_result or "",
+                                    }
+                                )
+
+                            # Send results back to model for continuation
+                            try:
+                                continuation_data = {
+                                    **form_data,
+                                    "model": form_data.get("model", ""),
+                                    "messages": messages,
+                                }
+
+                                continuation_response = await generate_chat_completion(
+                                    request,
+                                    continuation_data,
+                                    user,
+                                    bypass_system_prompt=True,
+                                )
+
+                                # Parse continuation response
+                                if isinstance(continuation_response, JSONResponse) and isinstance(
+                                    continuation_response.body, bytes
+                                ):
+                                    response_data = json.loads(
+                                        continuation_response.body.decode("utf-8", "replace")
+                                    )
+                                elif isinstance(continuation_response, dict):
+                                    response_data = continuation_response
+                                else:
+                                    break
+
+                                choices = response_data.get("choices", [])
+                                tool_calls_in_response = (
+                                    choices[0].get("message", {}).get("tool_calls", [])
+                                    if choices
+                                    else []
+                                )
+                            except Exception as e:
+                                log.error(f"Error in non-streaming tool call continuation: {e}")
+                                break
+
+                    # Now handle final content (after tool loop or direct response)
                     if choices and choices[0].get("message", {}).get("content"):
                         content = response_data["choices"][0]["message"]["content"]
 
@@ -2928,12 +3085,21 @@ async def process_chat_response(
                         if not data.strip():
                             continue
 
+                        # Log raw SSE lines for debugging tool_calls
+                        if "tool_calls" in data or "finish_reason" in data:
+                            log.info(f"=== SSE raw line: {data[:500]} ===")
+
                         # "data:" is the prefix for each event
                         if not data.startswith("data:"):
-                            continue
+                            # Check if the line is raw JSON (no SSE prefix)
+                            if data.strip().startswith("{"):
+                                log.info(f"=== SSE line without 'data:' prefix, attempting JSON parse ===")
+                            else:
+                                continue
 
-                        # Remove the prefix
-                        data = data[len("data:") :].strip()
+                        # Remove the prefix (if present)
+                        if data.startswith("data:"):
+                            data = data[len("data:") :].strip()
 
                         try:
                             data = json.loads(data)
@@ -2997,6 +3163,10 @@ async def process_chat_response(
                                         continue
 
                                     delta = choices[0].get("delta", {})
+
+                                    # Fallback: some backends return "message" instead of "delta" in SSE
+                                    if not delta and choices[0].get("message"):
+                                        delta = choices[0].get("message", {})
 
                                     # Handle delta annotations
                                     annotations = delta.get("annotations")
@@ -3319,7 +3489,10 @@ async def process_chat_response(
                                 )
 
                     if response_tool_calls:
+                        log.info(f"=== Streaming: extracted {len(response_tool_calls)} tool_calls: {[tc.get('function', {}).get('name', '') for tc in response_tool_calls]} ===")
                         tool_calls.append(response_tool_calls)
+                    else:
+                        log.info("=== Streaming: no tool_calls in response ===")
 
                     if response.background:
                         await response.background()
