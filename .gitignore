@@ -1,4 +1,5 @@
 x.py
+/x
 yarn.lock
 .DS_Store
 node_modules
